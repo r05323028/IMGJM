@@ -4,8 +4,10 @@
 # https://opensource.org/licenses/MIT
 import os
 from typing import Dict, Tuple, List
+from itertools import zip_longest
 from more_itertools import flatten
 import numpy as np
+import tensorflow as tf
 from gensim.models import KeyedVectors
 from gensim.scripts.glove2word2vec import glove2word2vec
 
@@ -34,3 +36,28 @@ def build_glove_embedding(
     unk = np.random.uniform(-0.25, 0.25, size=(1, embeddings.shape[1]))
     embeddings = np.concatenate((embeddings, pad, unk), axis=0)
     return word2id, embeddings, glove_model
+
+
+def pad_char_sequences(sequences: List, padding='post',
+                       value=0.0) -> np.ndarray:
+    max_sent_len = max([len(sent) for sent in sequences])
+    max_word_len = max(
+        [max([len(word) for word in sent]) for sent in sequences])
+    sequences_ = []
+    for sent in sequences:
+        sent_ = tf.keras.preprocessing.sequence.pad_sequences(
+            sent, maxlen=max_word_len, padding=padding, value=value)
+        if len(sent_) < max_sent_len:
+            if padding == 'post':
+                sent_ = np.concatenate(
+                    (sent_,
+                     np.full(shape=(max_sent_len - len(sent_), max_word_len),
+                             fill_value=value)),
+                    axis=0)
+            else:
+                sent_ = np.concatenate(
+                    (np.full(shape=(max_sent_len - len(sent_), max_word_len),
+                             fill_value=value), sent_),
+                    axis=0)
+        sequences_.append(sent_)
+    return np.array(sequences_)

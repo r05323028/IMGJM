@@ -8,13 +8,49 @@ import tensorflow as tf
 
 class BaseDataset(metaclass=ABCMeta):
     def __init__(self,
+                 data_dir: str = None,
+                 resource: str = None,
                  char2id: Dict = None,
                  word2id: Dict = None,
                  *args,
                  **kwargs):
         self.base_data_dir = Path('dataset')
-        self._char2id = char2id
-        self._word2id = word2id
+        if resource:
+            self.train_data_fp = self.base_data_dir / f'{data_dir}_{resource}' / 'train.txt'
+            self.test_data_fp = self.base_data_dir / f'{data_dir}_{resource}' / 'test.txt'
+        else:
+            self.train_data_fp = self.base_data_dir / data_dir / 'train.txt'
+            self.test_data_fp = self.base_data_dir / data_dir / 'test.txt'
+        with open(self.train_data_fp, 'r') as train_file:
+            self.raw_train_data = train_file.readlines()
+        with open(self.test_data_fp, 'r') as test_file:
+            self.raw_test_data = test_file.readlines()
+        self.char2id = char2id
+        self.word2id = word2id
+
+    @property
+    def word2id(self):
+        return self._word2id
+
+    @word2id.setter
+    def word2id(self, w2i):
+        if w2i:
+            self._word2id = w2i
+        else:
+            self._word2id = self.build_word2id(self.raw_train_data +
+                                               self.raw_test_data)
+
+    @property
+    def char2id(self):
+        return self._char2id
+
+    @char2id.setter
+    def char2id(self, c2i):
+        if c2i:
+            self._char2id = c2i
+        else:
+            self._char2id = self.build_char2id(self.raw_train_data +
+                                               self.raw_test_data)
 
     @staticmethod
     def build_word2id(sentence_list: List) -> Dict:
@@ -111,18 +147,17 @@ class BaseDataset(metaclass=ABCMeta):
         '''
         char_ids, word_ids = [], []
         for sent in sentence_list:
-            char_results, word_results = [], []
+            wids, cids = [], []
             for word in sent:
-                word_results.append(
-                    self._word2id.get(word,
-                                      len(self._word2id.keys()) + 1))
-                char_results.append([
-                    self._char2id.get(char,
-                                      len(self._char2id.keys()) + 1)
-                    for char in word
-                ])
-            char_ids.append(char_ids)
-            word_ids.append(word_ids)
+                wids.append(self.word2id.get(word, len(self.word2id) + 1))
+                cid_in_cid = []
+                for char in word:
+                    cid_in_cid.append(
+                        self.char2id.get(char,
+                                         len(self.char2id) + 1))
+                cids.append(cid_in_cid)
+            word_ids.append(wids)
+            char_ids.append(cids)
         return char_ids, word_ids
 
 
@@ -134,32 +169,12 @@ class SemEval2014(BaseDataset):
                  resource: str = 'laptop',
                  *args,
                  **kwargs):
-        super(SemEval2014, self).__init__(char2id=char2id,
+        super(SemEval2014, self).__init__(data_dir=data_dir,
+                                          resource=resource,
+                                          char2id=char2id,
                                           word2id=word2id,
                                           *args,
                                           **kwargs)
-        self.train_data_fp = self.base_data_dir / f'{data_dir}_{resource}' / 'train.txt'
-        self.test_data_fp = self.base_data_dir / f'{data_dir}_{resource}' / 'test.txt'
-        with open(self.train_data_fp, 'r') as train_file:
-            self.raw_train_data = train_file.readlines()
-        with open(self.test_data_fp, 'r') as test_file:
-            self.raw_test_data = test_file.readlines()
-
-    @property
-    def word2id(self):
-        if self._word2id:
-            return self._word2id
-        else:
-            return super(SemEval2014, self).build_word2id(self.raw_train_data +
-                                                          self.raw_test_data)
-
-    @property
-    def char2id(self):
-        if self._char2id:
-            return self._char2id
-        else:
-            return super(SemEval2014, self).build_char2id(self.raw_train_data +
-                                                          self.raw_test_data)
 
 
 class Twitter(BaseDataset):
@@ -169,29 +184,9 @@ class Twitter(BaseDataset):
                  word2id: Dict = None,
                  *args,
                  **kwargs):
-        super(Twitter, self).__init__(char2id=char2id,
+        super(Twitter, self).__init__(data_dir=data_dir,
+                                      resource=None,
+                                      char2id=char2id,
                                       word2id=word2id,
                                       *args,
                                       **kwargs)
-        self.train_data_fp = self.base_data_dir / data_dir / 'train.txt'
-        self.test_data_fp = self.base_data_dir / data_dir / 'test.txt'
-        with open(self.train_data_fp, 'r') as train_file:
-            self.raw_train_data = train_file.readlines()
-        with open(self.test_data_fp, 'r') as test_file:
-            self.raw_test_data = test_file.readlines()
-
-    @property
-    def word2id(self):
-        if self._word2id:
-            return self._word2id
-        else:
-            return super(Twitter, self).build_word2id(self.raw_train_data +
-                                                      self.raw_test_data)
-
-    @property
-    def char2id(self):
-        if self._char2id:
-            return self._char2id
-        else:
-            return super(Twitter, self).build_char2id(self.raw_train_data +
-                                                      self.raw_test_data)
