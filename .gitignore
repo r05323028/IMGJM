@@ -1,0 +1,13 @@
+// vscode settings
+.vscode
+
+// python
+__pycache__
+.pytest_cache
+
+// dataset
+embeddings/*
+
+// model outputs
+logs
+!.gitkeep

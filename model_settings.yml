@@ -1,0 +1,12 @@
+paper:
+  learning_rate: 0.001
+  dropout_rate: 0.5
+  batch_size: 32
+  kernel_size: 3
+  filter_nums: 50
+  C_tar: 5
+  C_sent: 7
+  beta: 1.0
+  gamma: 0.7
+  pad_index: 2196016
+  unk_index: 2196017
