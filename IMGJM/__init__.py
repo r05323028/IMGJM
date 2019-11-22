@@ -93,6 +93,7 @@ class IMGJM(BaseModel):
                                                    C_sent=C_sent)
 
         # build session
+        self.build_model()
         self.build_tf_session(logdir=logdir)
         self.initialize_weights()
 

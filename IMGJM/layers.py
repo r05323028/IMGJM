@@ -22,8 +22,8 @@ class Gate(BaseLayer):
         dim_a (int): dimension of a.
         dim_b (int): dimension of b.
     '''
-    def __init__(self, dim_a: int, dim_b: int, *args, **kwargs):
-        with tf.variable_scope('Gate_Variables', reuse=tf.AUTO_REUSE):
+    def __init__(self, name: str, dim_a: int, dim_b: int, *args, **kwargs):
+        with tf.variable_scope(f'{name}_Gate_Variables', reuse=tf.AUTO_REUSE):
             self.W_g = tf.get_variable('W_g',
                                        shape=[dim_b, dim_b],
                                        dtype=tf.float32)
@@ -49,9 +49,9 @@ class Gate(BaseLayer):
 
 
 class GloveEmbedding(BaseLayer):
-    def __call__(self, inputs: Union[np.ndarray, tf.Tensor], embedding_placeholder: tf.Tensor) -> tf.Tensor:
-        word_embeddings = tf.nn.embedding_lookup(embedding_placeholder,
-                                                 inputs)
+    def __call__(self, inputs: Union[np.ndarray, tf.Tensor],
+                 embedding_placeholder: tf.Tensor) -> tf.Tensor:
+        word_embeddings = tf.nn.embedding_lookup(embedding_placeholder, inputs)
         return word_embeddings
 
 
@@ -78,7 +78,7 @@ class CharEmbedding(BaseLayer):
         with tf.variable_scope('CharEmbedding_Variables', reuse=tf.AUTO_REUSE):
             self.embedding_weights = tf.get_variable(
                 'embedding_weights',
-                shape=[self.vocab_size, self.embedding_size],
+                shape=embedding_weights.shape,
                 initializer=tf.initializers.constant(embedding_weights),
                 dtype=tf.float32)
             self.conv_weights = tf.get_variable('conv_weights',
@@ -183,8 +183,8 @@ class Interaction(BaseLayer):
                                          dtype=tf.float32)
             self.W_l = tf.get_variable('W_l', shape=[C_tar, 2])
             self.W_r = tf.get_variable('W_r', shape=[C_sent, hidden_nums])
-            self.gate_T = Gate(dim_a=2, dim_b=2)
-            self.gate_S = Gate(dim_a=2, dim_b=2)
+            self.gate_T = Gate(name='Target', dim_a=2, dim_b=2)
+            self.gate_S = Gate(name='Sentiment', dim_a=2, dim_b=2)
 
     def __call__(self, coarse_grained_target: tf.Tensor,
                  sentiment_clue: tf.Tensor,
@@ -234,8 +234,8 @@ class FineGrainedLayer(BaseLayer):
             self.W_fs = tf.get_variable('W_fs',
                                         shape=[C_sent, hidden_nums],
                                         dtype=tf.float32)
-            self.gate_T = Gate(dim_a=C_tar, dim_b=C_tar)
-            self.gate_S = Gate(dim_a=C_sent, dim_b=C_sent)
+            self.gate_T = Gate(name='Target', dim_a=C_tar, dim_b=C_tar)
+            self.gate_S = Gate(name='Sentiment', dim_a=C_sent, dim_b=C_sent)
 
     def __call__(self, interacted_target: tf.Tensor,
                  interacted_sentiment: tf.Tensor, hidden_states: tf.Tensor,

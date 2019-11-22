@@ -13,6 +13,7 @@ tensorflow = "==1.15"
 gensim = "*"
 more-itertools = "*"
 tqdm = "*"
+coloredlogs = "*"
 
 [requires]
 python_version = "3.6"
