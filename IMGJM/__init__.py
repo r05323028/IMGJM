@@ -97,6 +97,9 @@ class IMGJM(BaseModel):
         self.initialize_weights()
 
     def build_model(self):
+        '''
+        Model building function
+        '''
         with tf.name_scope('Placeholders'):
             self.word_ids = tf.placeholder(dtype=tf.int32, shape=[None, None])
             self.char_ids = tf.placeholder(dtype=tf.int32,
@@ -107,6 +110,7 @@ class IMGJM(BaseModel):
                                               shape=[None, None])
             self.glove_embedding = tf.placeholder(dtype=tf.float32,
                                                   shape=[None, None])
+            self.training = tf.placeholder(dtype=tf.bool)
         with tf.name_scope('Hidden_layers'):
             char_embedding = self.char_embedding(self.char_ids)
             word_embedding = self.word_embedding(
@@ -165,19 +169,99 @@ class IMGJM(BaseModel):
                 self.y_sentiment, self.sentiment_preds)
 
     def train_on_batch(self, inputs: Dict):
-        self.sess.run(
-            [self.train_op],
-            feed_dict={
-                self.char_ids: inputs.get('char_ids'),
-                self.word_ids: inputs.get('word_ids'),
-                self.sequence_length: inputs.get('sequence_length'),
-                self.y_target: inputs.get('y_target'),
-                self.y_sentiment: inputs.get('y_sentiment')
-            })
-        return NotImplemented
+        '''
+        Train function of IMGJM
 
-    def predict_on_batch(self, inputs: Dict):
-        return NotImplemented
+        Args:
+            inputs (dict)
+
+        Returns:
+            tar_p (float) 
+            tar_r (float) 
+            tar_f1 (float) 
+            sent_p (float) 
+            sent_r (float) 
+            sent_f1 (float) 
+        '''
+        feed_dict = {
+            self.char_ids: inputs.get('char_ids'),
+            self.word_ids: inputs.get('word_ids'),
+            self.sequence_length: inputs.get('sequence_length'),
+            self.y_target: inputs.get('y_target'),
+            self.y_sentiment: inputs.get('y_sentiment'),
+            self.glove_embedding: inputs.get('glove_embedding'),
+            self.training: True
+        }
+        ops = [
+            self.train_op, self.target_precision_op, self.target_recall_op,
+            self.sentiment_precision_op, self.sentiment_recall_op,
+            self.sentiment_f1_op
+        ]
+        metrics = [
+            self.target_precision, self.target_recall, self.target_f1,
+            self.sentiment_precision, self.sentiment_recall, self.sentiment_f1
+        ]
+        self.sess.run(ops, feed_dict=feed_dict)
+        tar_p, tar_r, tar_f1, sent_p, sent_r, sent_f1 = self.sess.run(metrics)
+        return tar_p, tar_r, tar_f1, sent_p, sent_r, sent_f1
 
     def test_on_batch(self, inputs: Dict):
-        return NotImplemented
+        '''
+        Test function of IMGJM
+
+        Args:
+            inputs (dict)
+
+        Returns:
+            tar_p (float) 
+            tar_r (float) 
+            tar_f1 (float) 
+            sent_p (float) 
+            sent_r (float) 
+            sent_f1 (float) 
+        '''
+        feed_dict = {
+            self.char_ids: inputs.get('char_ids'),
+            self.word_ids: inputs.get('word_ids'),
+            self.sequence_length: inputs.get('sequence_length'),
+            self.y_target: inputs.get('y_target'),
+            self.y_sentiment: inputs.get('y_sentiment'),
+            self.glove_embedding: inputs.get('glove_embedding'),
+            self.training: False
+        }
+        ops = [
+            self.target_precision_op, self.target_recall_op,
+            self.sentiment_precision_op, self.sentiment_recall_op,
+            self.sentiment_f1_op
+        ]
+        metrics = [
+            self.target_precision, self.target_recall, self.target_f1,
+            self.sentiment_precision, self.sentiment_recall, self.sentiment_f1
+        ]
+        self.sess.run(ops, feed_dict=feed_dict)
+        tar_p, tar_r, tar_f1, sent_p, sent_r, sent_f1 = self.sess.run(metrics)
+        return tar_p, tar_r, tar_f1, sent_p, sent_r, sent_f1
+
+    def predict_on_batch(self, inputs: Dict):
+        '''
+        Predict function of IMGJM
+
+        Args:
+            inputs (dict)
+
+        Returns:
+            target_preds (np.ndarray)
+            sentiment_preds (np.ndarray)
+        '''
+        feed_dict = {
+            self.char_ids: inputs.get('char_ids'),
+            self.word_ids: inputs.get('word_ids'),
+            self.sequence_length: inputs.get('sequence_length'),
+            self.y_target: inputs.get('y_target'),
+            self.y_sentiment: inputs.get('y_sentiment'),
+            self.glove_embedding: inputs.get('glove_embedding'),
+            self.training: False
+        }
+        target_preds, sentiment_preds = self.sess.run(
+            [self.target_preds, self.sentiment_preds], feed_dict=feed_dict)
+        return target_preds, sentiment_preds

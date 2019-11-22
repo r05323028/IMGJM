@@ -12,6 +12,7 @@ pylint = "*"
 tensorflow = "==1.15"
 gensim = "*"
 more-itertools = "*"
+tqdm = "*"
 
 [requires]
 python_version = "3.6"
