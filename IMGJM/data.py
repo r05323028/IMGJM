@@ -1,9 +1,12 @@
 import re
+import random
 from abc import ABCMeta
 from pathlib import Path
 from typing import List, Tuple, Dict
 from more_itertools import flatten
+import numpy as np
 import tensorflow as tf
+from IMGJM.utils import pad_char_sequences
 
 
 class BaseDataset(metaclass=ABCMeta):
@@ -12,6 +15,7 @@ class BaseDataset(metaclass=ABCMeta):
                  resource: str = None,
                  char2id: Dict = None,
                  word2id: Dict = None,
+                 shuffle: bool = True,
                  *args,
                  **kwargs):
         self.base_data_dir = Path('dataset')
@@ -27,6 +31,9 @@ class BaseDataset(metaclass=ABCMeta):
             self.raw_test_data = test_file.readlines()
         self.char2id = char2id
         self.word2id = word2id
+        if shuffle:
+            random.shuffle(self.raw_train_data)
+            random.shuffle(self.raw_test_data)
 
     @property
     def word2id(self):
@@ -131,7 +138,7 @@ class BaseDataset(metaclass=ABCMeta):
             sentences.append(sent_)
             entities.append(entity_)
             polarities.append(polarity_)
-        return sentences, entity_, polarities
+        return sentences, entities, polarities
 
     def transform(self, sentence_list: List[List]
                   ) -> Tuple[List[List[List]], List[List]]:
@@ -159,6 +166,62 @@ class BaseDataset(metaclass=ABCMeta):
             word_ids.append(wids)
             char_ids.append(cids)
         return char_ids, word_ids
+
+    def merge_all(self, sentences: List[str]) -> Tuple[List]:
+        sents, entities, polarities = self.format_dataset(sentences)
+        char_ids, word_ids = self.transform(sents)
+        sequence_length = [len(sent) for sent in word_ids]
+        return char_ids, word_ids, sequence_length, entities, polarities
+
+    def merge_and_pad_all(self, sentences: List[str]) -> Tuple[np.ndarray]:
+        sents, entities, polarities = self.format_dataset(sentences)
+        char_ids, word_ids = self.transform(sents)
+        pad_char_ids = pad_char_sequences(char_ids,
+                                          padding='post',
+                                          value=len(self.char2id))
+        pad_word_ids = tf.keras.preprocessing.sequence.pad_sequences(
+            word_ids, padding='post', value=len(self.word2id))
+        sequence_length = [len(sent) for sent in word_ids]
+        pad_entities = tf.keras.preprocessing.sequence.pad_sequences(
+            entities, padding='post', value=0)
+        pad_polarities = tf.keras.preprocessing.sequence.pad_sequences(
+            polarities, padding='post', value=0)
+        return pad_char_ids, pad_word_ids, sequence_length, pad_entities, pad_polarities
+
+    @property
+    def train_data(self) -> Tuple[List]:
+        outputs = self.merge_all(self.raw_train_data)
+        return outputs
+
+    @property
+    def test_data(self) -> Tuple[np.ndarray]:
+        outputs = self.merge_all(self.raw_test_data)
+        return outputs
+
+    @property
+    def pad_train_data(self) -> Tuple[np.ndarray]:
+        outputs = self.merge_and_pad_all(self.raw_train_data)
+        return outputs
+
+    @property
+    def pad_test_data(self) -> Tuple[np.ndarray]:
+        outputs = self.merge_and_pad_all(self.raw_test_data)
+        return outputs
+
+    def batch_generator(self, batch_size: int = 32,
+                        training: bool = True) -> Tuple[np.ndarray]:
+        if training:
+            dataset = self.raw_train_data
+        else:
+            dataset = self.raw_test_data
+        start, end = 0, batch_size
+        batch_nums = (len(dataset) // batch_size) + 1
+        for _ in range(batch_nums):
+            pad_char_ids, pad_word_ids, sequence_length, pad_entities, pad_polarities = self.merge_and_pad_all(
+                dataset[start:end])
+            yield (pad_char_ids, pad_word_ids, sequence_length, pad_entities,
+                   pad_polarities)
+            start, end = end, end + batch_size
 
 
 class SemEval2014(BaseDataset):

@@ -49,25 +49,8 @@ class Gate(BaseLayer):
 
 
 class GloveEmbedding(BaseLayer):
-    def __init__(self, embedding_weights: np.ndarray, *args, **kwargs):
-        with tf.variable_scope('GloveEmbedding_Variables',
-                               reuse=tf.AUTO_REUSE):
-            self.vocab_size, self.embedding_size = embedding_weights.shape
-            self.embedding_variables = embedding_weights
-
-    @property
-    def embedding_variables(self) -> tf.Tensor:
-        return self._embedding_variables
-
-    @embedding_variables.setter
-    def embedding_variables(self, embedding_weights: np.ndarray):
-        self._embedding_variables = tf.get_variable(
-            'embedding_weights',
-            shape=embedding_weights.shape,
-            initializer=tf.initializers.constant(embedding_weights))
-
-    def __call__(self, inputs: Union[np.ndarray, tf.Tensor]) -> tf.Tensor:
-        word_embeddings = tf.nn.embedding_lookup(self.embedding_variables,
+    def __call__(self, inputs: Union[np.ndarray, tf.Tensor], embedding_placeholder: tf.Tensor) -> tf.Tensor:
+        word_embeddings = tf.nn.embedding_lookup(embedding_placeholder,
                                                  inputs)
         return word_embeddings
 

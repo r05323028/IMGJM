@@ -52,7 +52,6 @@ class IMGJM(BaseModel):
     '''
     def __init__(self,
                  vocab_size: int,
-                 embedding_weights: np.ndarray,
                  batch_size: int = 32,
                  learning_rate: float = 0.001,
                  embedding_size: int = 300,
@@ -84,8 +83,7 @@ class IMGJM(BaseModel):
 
         # layers
         self.char_embedding = CharEmbedding(vocab_size=vocab_size)
-        self.word_embedding = GloveEmbedding(
-            embedding_weights=embedding_weights)
+        self.word_embedding = GloveEmbedding()
         self.coarse_grained_layer = CoarseGrainedLayer(hidden_nums=hidden_nums)
         self.interaction_layer = Interaction(hidden_nums=hidden_nums,
                                              C_tar=C_tar,
@@ -107,9 +105,12 @@ class IMGJM(BaseModel):
             self.y_target = tf.placeholder(dtype=tf.int32, shape=[None, None])
             self.y_sentiment = tf.placeholder(dtype=tf.int32,
                                               shape=[None, None])
+            self.glove_embedding = tf.placeholder(dtype=tf.float32,
+                                                  shape=[None, None])
         with tf.name_scope('Hidden_layers'):
             char_embedding = self.char_embedding(self.char_ids)
-            word_embedding = self.word_embedding(self.word_ids)
+            word_embedding = self.word_embedding(
+                self.word_ids, embedding_placeholder=self.glove_embedding)
             coarse_grained_target, sentiment_clue, hidden_states = self.coarse_grained_layer(
                 char_embedding, word_embedding, self.sequence_length)
             interacted_target, interacted_sentiment = self.interaction_layer(
