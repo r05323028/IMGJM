@@ -95,19 +95,18 @@ class CharEmbedding(BaseLayer):
             char_embedding = tf.nn.embedding_lookup(self.embedding_weights,
                                                     inputs,
                                                     name='char_embedding')
-            sp = char_embedding.shape
+            # https://stackoverflow.com/questions/37096225/how-to-understand-static-shape-and-dynamic-shape-in-tensorflow
+            sp = tf.shape(char_embedding)
             char_embedding_ = tf.reshape(char_embedding,
-                                         shape=[sp[0] * sp[1], sp[2], -1])
+                                         shape=[sp[0] * sp[1], sp[2], sp[3]])
             cnn_output = tf.nn.conv1d(char_embedding_,
                                       filters=self.conv_weights,
                                       stride=1,
                                       padding='VALID')
             cnn_output = tf.nn.relu(cnn_output + self.conv_bias)
-            cnn_output = tf.nn.max_pool1d(cnn_output,
-                                          ksize=[self.window_size, 1, 1],
-                                          strides=[1, 1, 1],
-                                          padding='VALID')
-            cnn_output = tf.reshape(cnn_output, shape=(sp[0], sp[1], sp[-1]))
+            cnn_output = tf.reduce_max(cnn_output, axis=1)
+            cnn_output = tf.reshape(cnn_output,
+                                    shape=[sp[0], sp[1], self.embedding_size])
             return cnn_output
 
 
@@ -144,7 +143,8 @@ class CoarseGrainedLayer(BaseLayer):
             z_S (tf.Tensor): sentiment clue
             hidden_states (tf.Tensor): bi-GRU hidden states
         '''
-        with tf.name_scope('CoarseGrainedLayer'):
+        with tf.name_scope('CoarseGrainedLayer'), tf.variable_scope(
+                'CoarseGrainedLayer_Variables', reuse=tf.AUTO_REUSE):
             word_representation = tf.concat([char_embedding, word_embedding],
                                             axis=-1)
             (hidden_states, final_states) = tf.nn.bidirectional_dynamic_rnn(
@@ -184,7 +184,7 @@ class Interaction(BaseLayer):
             self.W_l = tf.get_variable('W_l', shape=[C_tar, 2])
             self.W_r = tf.get_variable('W_r', shape=[C_sent, hidden_nums])
             self.gate_T = Gate(name='Target', dim_a=2, dim_b=2)
-            self.gate_S = Gate(name='Sentiment', dim_a=2, dim_b=2)
+            self.gate_S = Gate(name='Sentiment', dim_a=C_tar, dim_b=C_sent)
 
     def __call__(self, coarse_grained_target: tf.Tensor,
                  sentiment_clue: tf.Tensor,
@@ -240,13 +240,15 @@ class FineGrainedLayer(BaseLayer):
     def __call__(self, interacted_target: tf.Tensor,
                  interacted_sentiment: tf.Tensor, hidden_states: tf.Tensor,
                  sequence_length: tf.Tensor) -> tf.Tensor:
-        with tf.name_scope('FineGrainedLayer'):
+        with tf.name_scope('FineGrainedLayer'), tf.variable_scope(
+                'FineGrainedLayer_Variables', reuse=tf.AUTO_REUSE):
             (hidden_states_, final_outputs) = tf.nn.bidirectional_dynamic_rnn(
                 self.cell_fw,
                 self.cell_bw,
                 inputs=hidden_states,
                 sequence_length=sequence_length,
                 dtype=tf.float32)
+            hidden_states_ = tf.concat(hidden_states_, axis=-1)
             f_T = tf.matmul(hidden_states_, self.W_ft, transpose_b=True)
             f_S = tf.matmul(hidden_states_, self.W_fs, transpose_b=True)
             o_T = self.gate_T(interacted_target, f_T)

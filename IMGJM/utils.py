@@ -38,6 +38,18 @@ def build_glove_embedding(
     return word2id, embeddings, glove_model
 
 
+def build_mock_embedding(word2id: Dict,
+                         embedding_size: int = 300) -> Tuple[Dict, np.ndarray]:
+    vocab_size = len(word2id)
+    embedding = np.random.uniform(-0.25,
+                                  0.25,
+                                  size=(vocab_size, embedding_size))
+    pad = np.zeros(shape=(1, embedding_size))
+    unk = np.random.uniform(-0.25, 0.25, size=(1, embedding_size))
+    embedding = np.concatenate((embedding, pad, unk), axis=0)
+    return word2id, embedding
+
+
 def pad_char_sequences(sequences: List, padding='post',
                        value=0.0) -> np.ndarray:
     max_sent_len = max([len(sent) for sent in sequences])

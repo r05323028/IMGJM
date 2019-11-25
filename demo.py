@@ -57,32 +57,15 @@ def main(*args, **kwargs):
     logger.info('Build mock embedding')
     w2i, embedding_weights = build_mock_embedding(dataset.word2id)
     logger.info('Building mock embedding finished')
-    logger.info('Start training...')
     model = IMGJM(vocab_size=vocab_size, batch_size=kwargs.get('batch_size'))
-    for _ in trange(kwargs.get('epochs'), desc='epoch'):
-        train_batch_generator = tqdm(
-            dataset.batch_generator(batch_size=kwargs.get('batch_size')),
-            desc='training')
-        for input_tuple in train_batch_generator:
-            feed_dict = build_feed_dict(input_tuple, embedding_weights)
-            train_batch_generator.write(str(feed_dict.get('y_sentiment')))
-            tar_p, tar_r, tar_f1, sent_p, sent_r, sent_f1 = model.train_on_batch(
-                feed_dict)
-            train_batch_generator.set_description(
-                f'[Target]: p-{tar_p:.3f}, r-{tar_r:.3f}, f1-{tar_f1:.3f} [Senti]: p-{sent_p:.3f}, r-{sent_r:.3f}, f1-{sent_f1:.3f}'
-            )
-        test_batch_generator = tqdm(dataset.batch_generator(
-            batch_size=kwargs.get('batch_size'), training=False),
-                                    desc='testing')
-        for input_tuple in test_batch_generator:
-            feed_dict = build_feed_dict(input_tuple, embedding_weights)
-            tar_p, tar_r, tar_f1, sent_p, sent_r, sent_f1 = model.test_on_batch(
-                feed_dict)
-            test_batch_generator.set_description(
-                f'[Target]: p-{tar_p:.3f}, r-{tar_r:.3f}, f1-{tar_f1:.3f} [Senti]: p-{sent_p:.3f}, r-{sent_r:.3f}, f1-{sent_f1:.3f}'
-            )
-        model.save_model(kwargs.get('model_dir') + '/' + 'model')
-    logger.info('Training finished.')
+    s = ['did not enjoy the new windows 8 and touchscreen functions .']
+    model.load_model('outputs' + '/' + 'model')
+    inputs = dataset.merge_and_pad_all(s)
+    feed_dict = build_feed_dict(inputs, embedding_weights)
+    print([sent.replace('\n', '').split(' ') for sent in s])
+    print(model.predict_on_batch(feed_dict)[0])
+    print(model.predict_on_batch(feed_dict)[1])
+    print(model.get_sentiment_clue(feed_dict)[:, :, 1])
 
 
 if __name__ == '__main__':
