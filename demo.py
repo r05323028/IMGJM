@@ -14,6 +14,15 @@ from IMGJM.data import (SemEval2014, Twitter)
 from IMGJM.utils import build_glove_embedding, build_mock_embedding
 
 
+class BoolParser:
+    @classmethod
+    def parse(cls, arg: str) -> bool:
+        if arg.lower() in ['false', 'no']:
+            return False
+        else:
+            return True
+
+
 def get_logger(logger_name: str = 'IMGJM', level: str = 'INFO'):
     logger = logging.getLogger(logger_name)
     coloredlogs.install(
@@ -29,6 +38,9 @@ def get_args():
     arg_parser.add_argument('--batch_size', type=int, default=32)
     arg_parser.add_argument('--epochs', type=int, default=3)
     arg_parser.add_argument('--model_dir', type=str, default='outputs')
+    arg_parser.add_argument('--mock_embedding',
+                            type=BoolParser.parse,
+                            default=False)
     return vars(arg_parser.parse_args())
 
 
@@ -96,20 +108,27 @@ def build_feed_dict(input_tuple: Tuple[np.ndarray],
 def main(*args, **kwargs):
     np.random.seed(1234)
     logger = get_logger()
-    # logger.info('Loading Glove embedding...')
-    # word2id, embedding_weights, _ = build_glove_embedding()
-    # logger.info('Embeding loaded.')
-    logger.info('Initializing dataset...')
-    dataset = SemEval2014()
-    vocab_size = len(dataset.char2id)
-    logger.info('Dataset loaded.')
-    logger.info('Build mock embedding')
-    w2i, embedding_weights = build_mock_embedding(dataset.word2id)
-    logger.info('Building mock embedding finished')
-    model = IMGJM(vocab_size=vocab_size,
+    if kwargs.get('mock_embedding'):
+        logger.info('Initializing dataset...')
+        dataset = SemEval2014()
+        vocab_size = len(dataset.char2id)
+        logger.info('Dataset loaded.')
+        logger.info('Build mock embedding')
+        _, embedding_weights = build_mock_embedding(dataset.word2id)
+        logger.info('Building mock embedding finished')
+    else:
+        logger.info('Loading Glove embedding...')
+        word2id, embedding_weights, _ = build_glove_embedding()
+        logger.info('Embeding loaded.')
+        logger.info('Initializing dataset...')
+        dataset = SemEval2014(word2id=word2id)
+        vocab_size = len(dataset.char2id)
+        logger.info('Dataset loaded.')
+    model = IMGJM(char_vocab_size=vocab_size,
+                  embedding_weights=embedding_weights,
                   batch_size=kwargs.get('batch_size'),
                   deploy=True)
-    s = ['i love the operating system and the preloaded software .']
+    s = ["it ' s color is even cool ."]
     model.load_model('outputs' + '/' + 'model')
     inputs = dataset.merge_and_pad_all(s)
     feed_dict = build_feed_dict(inputs, embedding_weights)
