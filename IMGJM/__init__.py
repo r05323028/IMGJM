@@ -26,10 +26,10 @@ class BaseModel(metaclass=ABCMeta):
         self.sess.run(tf.global_variables_initializer())
         self.sess.run(tf.local_variables_initializer())
 
-    def save_model(self, model_dir: str):
+    def save_model(self, model_dir: str = 'outputs/model'):
         self.saver.save(sess=self.sess, save_path=model_dir)
 
-    def load_model(self, model_dir: str):
+    def load_model(self, model_dir: str = 'outputs/model'):
         self.saver.restore(sess=self.sess, save_path=model_dir)
 
 
@@ -66,7 +66,6 @@ class IMGJM(BaseModel):
                  beta: float = 1.0,
                  gamma: float = 0.7,
                  logdir: str = 'logs',
-                 model_dir: str = 'models',
                  deploy: bool = False,
                  *args,
                  **kwargs):
@@ -127,8 +126,8 @@ class IMGJM(BaseModel):
                                               shape=[None, None])
             self.glove_embedding = tf.Variable(tf.constant(
                 0.0, shape=self.embedding_shape),
-                                              trainable=False,
-                                              name='WordEmbedding')
+                                               trainable=False,
+                                               name='WordEmbedding')
             self.training = tf.placeholder(dtype=tf.bool)
         with tf.name_scope('Hidden_layers'):
             char_embedding = self.char_embedding(self.char_ids)
