@@ -6,6 +6,7 @@ from abc import ABCMeta
 from typing import Dict
 import numpy as np
 import tensorflow as tf
+import tf_metrics
 from IMGJM.layers import (CharEmbedding, GloveEmbedding, CoarseGrainedLayer,
                           Interaction, FineGrainedLayer)
 
@@ -37,7 +38,7 @@ class IMGJM(BaseModel):
     Interactive Multi-Grained Joint Model for Targeted Sentiment Analysis (CIKM 2019)
 
     Attributes:
-        vocab_size (int)
+        char_vocab_size (int)
         embedding_weights (np.ndarray)
         batch_size (int) 
         learning_rate (float) 
@@ -52,10 +53,10 @@ class IMGJM(BaseModel):
         gamma (float) 
     '''
     def __init__(self,
-                 vocab_size: int,
+                 char_vocab_size: int,
+                 embedding_weights: np.ndarray,
                  batch_size: int = 32,
                  learning_rate: float = 0.001,
-                 embedding_size: int = 300,
                  hidden_nums: int = 700,
                  dropout_rate: float = 0.5,
                  kernel_size: int = 3,
@@ -70,7 +71,11 @@ class IMGJM(BaseModel):
                  *args,
                  **kwargs):
         # attributes
-        self.embedding_size = embedding_size
+        self.char_vocab_size = char_vocab_size
+        self.word_vocab_size = embedding_weights.shape[0]
+        self.embedding_size = embedding_weights.shape[1]
+        self.embedding_weights = embedding_weights
+        self.embedding_shape = embedding_weights.shape
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.dropout_rate = dropout_rate
@@ -84,7 +89,7 @@ class IMGJM(BaseModel):
         self.model_dir = model_dir
 
         # layers
-        self.char_embedding = CharEmbedding(vocab_size=vocab_size)
+        self.char_embedding = CharEmbedding(vocab_size=char_vocab_size)
         self.word_embedding = GloveEmbedding()
         self.coarse_grained_layer = CoarseGrainedLayer(hidden_nums=hidden_nums)
         self.interaction_layer = Interaction(hidden_nums=hidden_nums,
@@ -98,6 +103,15 @@ class IMGJM(BaseModel):
         self.build_model()
         self.build_tf_session(logdir=logdir, deploy=deploy)
         self.initialize_weights()
+        self.initialize_embedding(embedding_weights)
+
+    def initialize_embedding(self, embedding_weights: np.ndarray):
+        with tf.name_scope('Initializing'):
+            self.embedding_placeholder = tf.placeholder(
+                tf.float32, shape=self.embedding_shape)
+            self.sess.run(
+                self.glove_embedding.assign(self.embedding_placeholder),
+                feed_dict={self.embedding_placeholder: embedding_weights})
 
     def build_model(self):
         '''
@@ -111,14 +125,22 @@ class IMGJM(BaseModel):
             self.y_target = tf.placeholder(dtype=tf.int32, shape=[None, None])
             self.y_sentiment = tf.placeholder(dtype=tf.int32,
                                               shape=[None, None])
-            self.glove_embedding = tf.placeholder(
-                dtype=tf.float32, shape=[None, self.embedding_size])
+            self.glove_embedding = tf.Variable(tf.constant(
+                0.0, shape=self.embedding_shape),
+                                              trainable=False,
+                                              name='WordEmbedding')
             self.training = tf.placeholder(dtype=tf.bool)
         with tf.name_scope('Hidden_layers'):
             char_embedding = self.char_embedding(self.char_ids)
             self.char_e = char_embedding
             word_embedding = self.word_embedding(
                 self.word_ids, embedding_placeholder=self.glove_embedding)
+            char_embedding = tf.layers.dropout(char_embedding,
+                                               rate=self.dropout_rate,
+                                               training=self.training)
+            word_embedding = tf.layers.dropout(word_embedding,
+                                               rate=self.dropout_rate,
+                                               training=self.training)
             coarse_grained_target, self.sentiment_clue, hidden_states = self.coarse_grained_layer(
                 char_embedding, word_embedding, self.sequence_length)
             interacted_target, interacted_sentiment = self.interaction_layer(
@@ -126,6 +148,13 @@ class IMGJM(BaseModel):
             multi_grained_target, multi_grained_sentiment = self.fine_grained_layer(
                 interacted_target, interacted_sentiment, hidden_states,
                 self.sequence_length)
+            multi_grained_target = tf.layers.dropout(multi_grained_target,
+                                                     rate=self.dropout_rate,
+                                                     training=self.training)
+            multi_grained_sentiment = tf.layers.dropout(
+                multi_grained_sentiment,
+                rate=self.dropout_rate,
+                training=self.training)
         with tf.name_scope('CRF'):
             with tf.name_scope('Target'), tf.variable_scope(
                     'Target_Variables', reuse=tf.AUTO_REUSE):
@@ -144,7 +173,7 @@ class IMGJM(BaseModel):
             loss_sentiment = tf.reduce_mean(-sentiment_log_likelihood)
             loss_ol = tf.reduce_mean(coarse_grained_target[:, :, 0] *
                                      self.sentiment_clue[:, :, 0])
-            # P(O) = 1 - P(not O)
+            # P(not O) = 1 - P(O)
             loss_brl = tf.losses.mean_squared_error(
                 1 - tf.nn.softmax(multi_grained_target)[:, :, 0],
                 1 - tf.nn.softmax(multi_grained_sentiment)[:, :, 0])
@@ -165,37 +194,69 @@ class IMGJM(BaseModel):
                 transition_params=sentiment_trans_params,
                 sequence_length=self.sequence_length)
         with tf.name_scope('Metrics'):
-            y_target = tf.one_hot(self.y_target, depth=self.C_tar)
-            target_preds = tf.one_hot(self.target_preds, depth=self.C_tar)
-            y_sentiment = tf.one_hot(self.y_sentiment, depth=self.C_sent)
-            sentiment_preds = tf.one_hot(self.sentiment_preds,
-                                         depth=self.C_sent)
+            average = 'micro'
             with tf.name_scope('Train'):
-                self.train_target_precision, self.train_target_precision_op = tf.metrics.precision(
-                    y_target, target_preds)
-                self.train_target_recall, self.train_target_recall_op = tf.metrics.recall(
-                    y_target, target_preds)
-                self.train_target_f1, self.train_target_f1_op = tf.contrib.metrics.f1_score(
-                    y_target, target_preds)
-                self.train_sentiment_precision, self.train_sentiment_precision_op = tf.metrics.precision(
-                    y_sentiment, sentiment_preds)
-                self.train_sentiment_recall, self.train_sentiment_recall_op = tf.metrics.recall(
-                    y_sentiment, sentiment_preds)
-                self.train_sentiment_f1, self.train_sentiment_f1_op = tf.contrib.metrics.f1_score(
-                    y_sentiment, sentiment_preds)
+                self.train_target_precision, self.train_target_precision_op = tf_metrics.precision(
+                    self.y_target,
+                    self.target_preds,
+                    self.C_tar, [i for i in range(1, self.C_tar)],
+                    average=average)
+                self.train_target_recall, self.train_target_recall_op = tf_metrics.recall(
+                    self.y_target,
+                    self.target_preds,
+                    self.C_tar, [i for i in range(1, self.C_tar)],
+                    average=average)
+                self.train_target_f1, self.train_target_f1_op = tf_metrics.f1(
+                    self.y_target,
+                    self.target_preds,
+                    self.C_tar, [i for i in range(1, self.C_tar)],
+                    average=average)
+                self.train_sentiment_precision, self.train_sentiment_precision_op = tf_metrics.precision(
+                    self.y_sentiment,
+                    self.sentiment_preds,
+                    self.C_sent, [i for i in range(1, self.C_sent)],
+                    average=average)
+                self.train_sentiment_recall, self.train_sentiment_recall_op = tf_metrics.recall(
+                    self.y_sentiment,
+                    self.sentiment_preds,
+                    self.C_sent, [i for i in range(1, self.C_sent)],
+                    average=average)
+                self.train_sentiment_f1, self.train_sentiment_f1_op = tf_metrics.f1(
+                    self.y_sentiment,
+                    self.sentiment_preds,
+                    self.C_sent, [i for i in range(1, self.C_sent)],
+                    average=average)
             with tf.name_scope('Test'):
-                self.test_target_precision, self.test_target_precision_op = tf.metrics.precision(
-                    y_target, target_preds)
-                self.test_target_recall, self.test_target_recall_op = tf.metrics.recall(
-                    y_target, target_preds)
-                self.test_target_f1, self.test_target_f1_op = tf.contrib.metrics.f1_score(
-                    y_target, target_preds)
-                self.test_sentiment_precision, self.test_sentiment_precision_op = tf.metrics.precision(
-                    y_sentiment, sentiment_preds)
-                self.test_sentiment_recall, self.test_sentiment_recall_op = tf.metrics.recall(
-                    y_sentiment, sentiment_preds)
-                self.test_sentiment_f1, self.test_sentiment_f1_op = tf.contrib.metrics.f1_score(
-                    y_sentiment, sentiment_preds)
+                self.test_target_precision, self.test_target_precision_op = tf_metrics.precision(
+                    self.y_target,
+                    self.target_preds,
+                    self.C_tar, [i for i in range(1, self.C_tar)],
+                    average=average)
+                self.test_target_recall, self.test_target_recall_op = tf_metrics.recall(
+                    self.y_target,
+                    self.target_preds,
+                    self.C_tar, [i for i in range(1, self.C_tar)],
+                    average=average)
+                self.test_target_f1, self.test_target_f1_op = tf_metrics.f1(
+                    self.y_target,
+                    self.target_preds,
+                    self.C_tar, [i for i in range(1, self.C_tar)],
+                    average=average)
+                self.test_sentiment_precision, self.test_sentiment_precision_op = tf_metrics.precision(
+                    self.y_sentiment,
+                    self.sentiment_preds,
+                    self.C_sent, [i for i in range(1, self.C_sent)],
+                    average=average)
+                self.test_sentiment_recall, self.test_sentiment_recall_op = tf_metrics.recall(
+                    self.y_sentiment,
+                    self.sentiment_preds,
+                    self.C_sent, [i for i in range(1, self.C_sent)],
+                    average=average)
+                self.test_sentiment_f1, self.test_sentiment_f1_op = tf_metrics.f1(
+                    self.y_sentiment,
+                    self.sentiment_preds,
+                    self.C_sent, [i for i in range(1, self.C_sent)],
+                    average=average)
 
     def train_on_batch(self, inputs: Dict):
         '''
@@ -218,7 +279,6 @@ class IMGJM(BaseModel):
             self.sequence_length: inputs.get('sequence_length'),
             self.y_target: inputs.get('y_target'),
             self.y_sentiment: inputs.get('y_sentiment'),
-            self.glove_embedding: inputs.get('glove_embedding'),
             self.training: True
         }
         metrics_ops = [
@@ -257,7 +317,6 @@ class IMGJM(BaseModel):
             self.sequence_length: inputs.get('sequence_length'),
             self.y_target: inputs.get('y_target'),
             self.y_sentiment: inputs.get('y_sentiment'),
-            self.glove_embedding: inputs.get('glove_embedding'),
             self.training: False
         }
         metrics_ops = [
@@ -291,7 +350,6 @@ class IMGJM(BaseModel):
             self.sequence_length: inputs.get('sequence_length'),
             self.y_target: inputs.get('y_target'),
             self.y_sentiment: inputs.get('y_sentiment'),
-            self.glove_embedding: inputs.get('glove_embedding'),
             self.training: False
         }
         target_preds, sentiment_preds = self.sess.run(
@@ -305,7 +363,6 @@ class IMGJM(BaseModel):
             self.sequence_length: inputs.get('sequence_length'),
             self.y_target: inputs.get('y_target'),
             self.y_sentiment: inputs.get('y_sentiment'),
-            self.glove_embedding: inputs.get('glove_embedding'),
             self.training: False
         }
         sentiment_clue = self.sess.run(self.sentiment_clue,

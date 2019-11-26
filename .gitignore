@@ -10,4 +10,5 @@ embeddings/*
 
 // model outputs
 logs
+outputs
 !.gitkeep
