@@ -85,7 +85,6 @@ class IMGJM(BaseModel):
         self.beta = beta
         self.gamma = gamma
         self.logdir = logdir
-        self.model_dir = model_dir
 
         # layers
         self.char_embedding = CharEmbedding(vocab_size=char_vocab_size)
