@@ -1,5 +1,5 @@
 '''
-Training script for IMGJM
+Demo script for IMGJM
 '''
 from typing import Dict, Tuple, List
 from argparse import ArgumentParser
