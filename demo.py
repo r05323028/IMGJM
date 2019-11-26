@@ -1,12 +1,14 @@
 '''
 Training script for IMGJM
 '''
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List
 from argparse import ArgumentParser
 import logging
 import coloredlogs
 import numpy as np
 from tqdm import tqdm, trange
+import matplotlib.pyplot as plt
+from matplotlib.ticker import MultipleLocator
 from IMGJM import IMGJM
 from IMGJM.data import (SemEval2014, Twitter)
 from IMGJM.utils import build_glove_embedding, build_mock_embedding
@@ -28,6 +30,53 @@ def get_args():
     arg_parser.add_argument('--epochs', type=int, default=3)
     arg_parser.add_argument('--model_dir', type=str, default='outputs')
     return vars(arg_parser.parse_args())
+
+
+def get_sentiment_clue_vis(word: List, target: List, sentiment: List,
+                           sentiment_clue: List):
+    fig, axes = plt.subplots(nrows=3, ncols=1)
+    axes[0].matshow(sentiment_clue, cmap='Blues')
+    axes[0].set_xticklabels([''] + word[0])
+    axes[0].yaxis.set_visible(False)
+    axes[0].xaxis.set_major_locator(MultipleLocator(1))
+    axes[0].xaxis.set_ticks_position('bottom')
+    axes[0].set_title('Sentiment Clue')
+    axes[1].matshow(target, cmap='Blues')
+    axes[1].set_xticklabels([''] + word[0])
+    axes[1].yaxis.set_visible(False)
+    axes[1].xaxis.set_major_locator(MultipleLocator(1))
+    axes[1].xaxis.set_ticks_position('bottom')
+    for i, tar in enumerate(target[0]):
+        if tar == 1:
+            axes[1].text(i, 0, s='B-PER', ha='center', va='center')
+        elif tar == 2:
+            axes[1].text(i, 0, s='I-PER', ha='center', va='center')
+        else:
+            axes[1].text(i, 0, s='O', ha='center', va='center')
+    axes[1].set_title('Target Prediction')
+    axes[2].matshow(sentiment, cmap='Blues')
+    axes[2].set_xticklabels([''] + word[0])
+    axes[2].yaxis.set_visible(False)
+    axes[2].xaxis.set_major_locator(MultipleLocator(1))
+    axes[2].xaxis.set_ticks_position('bottom')
+    for i, sent in enumerate(sentiment[0]):
+        if sent == 1:
+            axes[2].text(i, 0, s='B-POS', ha='center', va='center')
+        elif sent == 2:
+            axes[2].text(i, 0, s='I-POS', ha='center', va='center')
+        elif sent == 3:
+            axes[2].text(i, 0, s='B-NEU', ha='center', va='center')
+        elif sent == 4:
+            axes[2].text(i, 0, s='I-NEU', ha='center', va='center')
+        elif sent == 5:
+            axes[2].text(i, 0, s='B-NEG', ha='center', va='center')
+        elif sent == 6:
+            axes[2].text(i, 0, s='I-NEG', ha='center', va='center')
+        else:
+            axes[2].text(i, 0, s='O', ha='center', va='center')
+    axes[2].set_title('Sentiment Prediction')
+    fig.suptitle('IMGJM Prediction Visualization')
+    plt.show()
 
 
 def build_feed_dict(input_tuple: Tuple[np.ndarray],
@@ -57,15 +106,17 @@ def main(*args, **kwargs):
     logger.info('Build mock embedding')
     w2i, embedding_weights = build_mock_embedding(dataset.word2id)
     logger.info('Building mock embedding finished')
-    model = IMGJM(vocab_size=vocab_size, batch_size=kwargs.get('batch_size'))
-    s = ['did not enjoy the new windows 8 and touchscreen functions .']
+    model = IMGJM(vocab_size=vocab_size,
+                  batch_size=kwargs.get('batch_size'),
+                  deploy=True)
+    s = ['i love the operating system and the preloaded software .']
     model.load_model('outputs' + '/' + 'model')
     inputs = dataset.merge_and_pad_all(s)
     feed_dict = build_feed_dict(inputs, embedding_weights)
-    print([sent.replace('\n', '').split(' ') for sent in s])
-    print(model.predict_on_batch(feed_dict)[0])
-    print(model.predict_on_batch(feed_dict)[1])
-    print(model.get_sentiment_clue(feed_dict)[:, :, 1])
+    target_preds, sentiment_preds = model.predict_on_batch(feed_dict)
+    get_sentiment_clue_vis([sent.split(' ') for sent in s], target_preds,
+                           sentiment_preds,
+                           model.get_sentiment_clue(feed_dict)[:, :, 1])
 
 
 if __name__ == '__main__':

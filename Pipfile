@@ -14,6 +14,7 @@ gensim = "*"
 more-itertools = "*"
 tqdm = "*"
 coloredlogs = "*"
+matplotlib = "*"
 
 [requires]
 python_version = "3.6"

@@ -65,7 +65,6 @@ def main(*args, **kwargs):
             desc='training')
         for input_tuple in train_batch_generator:
             feed_dict = build_feed_dict(input_tuple, embedding_weights)
-            train_batch_generator.write(str(feed_dict.get('y_sentiment')))
             tar_p, tar_r, tar_f1, sent_p, sent_r, sent_f1 = model.train_on_batch(
                 feed_dict)
             train_batch_generator.set_description(

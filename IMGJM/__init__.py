@@ -11,14 +11,15 @@ from IMGJM.layers import (CharEmbedding, GloveEmbedding, CoarseGrainedLayer,
 
 
 class BaseModel(metaclass=ABCMeta):
-    def build_tf_session(self, logdir: str):
+    def build_tf_session(self, logdir: str, deploy: bool):
         self.sess = tf.Session()
         self.saver = tf.train.Saver()
-        self.merged_all = tf.summary.merge_all()
-        self.train_log_writer = tf.summary.FileWriter(logdir=logdir,
-                                                      graph=self.sess.graph)
-        self.test_log_writer = tf.summary.FileWriter(logdir=logdir,
-                                                     graph=self.sess.graph)
+        if not deploy:
+            self.merged_all = tf.summary.merge_all()
+            self.train_log_writer = tf.summary.FileWriter(
+                logdir=logdir, graph=self.sess.graph)
+            self.test_log_writer = tf.summary.FileWriter(logdir=logdir,
+                                                         graph=self.sess.graph)
 
     def initialize_weights(self):
         self.sess.run(tf.global_variables_initializer())
@@ -65,6 +66,7 @@ class IMGJM(BaseModel):
                  gamma: float = 0.7,
                  logdir: str = 'logs',
                  model_dir: str = 'models',
+                 deploy: bool = False,
                  *args,
                  **kwargs):
         # attributes
@@ -94,7 +96,7 @@ class IMGJM(BaseModel):
 
         # build session
         self.build_model()
-        self.build_tf_session(logdir=logdir)
+        self.build_tf_session(logdir=logdir, deploy=deploy)
         self.initialize_weights()
 
     def build_model(self):
@@ -142,6 +144,7 @@ class IMGJM(BaseModel):
             loss_sentiment = tf.reduce_mean(-sentiment_log_likelihood)
             loss_ol = tf.reduce_mean(coarse_grained_target[:, :, 0] *
                                      self.sentiment_clue[:, :, 0])
+            # P(O) = 1 - P(not O)
             loss_brl = tf.losses.mean_squared_error(
                 1 - tf.nn.softmax(multi_grained_target)[:, :, 0],
                 1 - tf.nn.softmax(multi_grained_sentiment)[:, :, 0])
