@@ -128,7 +128,7 @@ def main(*args, **kwargs):
                   embedding_weights=embedding_weights,
                   batch_size=kwargs.get('batch_size'),
                   deploy=True)
-    s = ["best spicy/p tuna roll , great asian salad ."]
+    s = ["best spicy tuna roll , great asian salad ."]
     model.load_model('outputs' + '/' + 'model')
     inputs = dataset.merge_and_pad_all(s)
     feed_dict = build_feed_dict(inputs, embedding_weights)
