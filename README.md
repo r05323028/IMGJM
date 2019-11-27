@@ -1,15 +1,28 @@
 # Interactive Multi-Grained Joint Model for Targeted Sentiment Analysis
 
-This repo is the TensorFlow implementation of **Interactive Multi-Grained Joint Model for Targeted Sentiment Analysis** which was accepted by ACM CIKM 2019.
+This repository is the TensorFlow implementation of **Interactive Multi-Grained Joint Model for Targeted Sentiment Analysis** which was accepted by ACM CIKM 2019.
 
 ![Model](model.png)
 
 ## Usage
 
-WIP
+### Environment Setup
+
+Just use pipenv to install requirements.
+
+```bash
+pipenv install
+```
+
+### Train Model
+
+```bash
+pipenv run python train.py --mock_embedding=[True|False] --epochs=[nums]
+```
 
 ## Performance
 
+- Word embedding: GloVe.840B.300D
 - Model setting
   - epochs: 50
   - learning_rate: 0.001
@@ -28,35 +41,35 @@ WIP
 
 | Dataset                | Embedding | Precision | Recall | F1    |
 | ---------------------- | --------- | --------- | ------ | ----- |
-| SemEval2014-Laptop     | GloVe     | 0.676     | 0.327  | 0.441 |
-| SemEval2014-Restaurant | GloVe     | 0.587     | 0.265  | 0.366 |
-| Twitter                | GloVe     | 0.0       | 0.0    | 0.0   |
+| SemEval2014-Laptop     | GloVe     | 0.416     | 0.353  | 0.382 |
+| SemEval2014-Restaurant | GloVe     | 0.463     | 0.267  | 0.339 |
+| Twitter                | GloVe     | 0.834     | 0.886  | 0.859 |
 
 #### Test
 
 | Dataset                | Embedding | Precision | Recall | F1    |
 | ---------------------- | --------- | --------- | ------ | ----- |
-| SemEval2014-Laptop     | GloVe     | 0.823     | 0.284  | 0.423 |
-| SemEval2014-Restaurant | GloVe     | 0.877     | 0.188  | 0.310 |
-| Twitter                | GloVe     | 0.0       | 0.0    | 0.0   |
+| SemEval2014-Laptop     | GloVe     | 0.791     | 0.329  | 0.465 |
+| SemEval2014-Restaurant | GloVe     | 0.884     | 0.189  | 0.311 |
+| Twitter                | GloVe     | 0.992     | 0.990  | 0.991 |
 
 ### Sentiment Analysis
 
 #### Train
 
-| Dataset                | Precision | Recall | F1    |
-| ---------------------- | --------- | ------ | ----- |
-| SemEval2014-Laptop     | 0.618     | 0.256  | 0.362 |
-| SemEval2014-Restaurant | 0.257     | 0.217  | 0.236 |
-| Twitter                | 0.0       | 0.0    | 0.0   |
+| Dataset                | Embedding | Precision | Recall | F1    |
+| ---------------------- | --------- | --------- | ------ | ----- |
+| SemEval2014-Laptop     | GloVe     | 0.574     | 0.261  | 0.359 |
+| SemEval2014-Restaurant | GloVe     | 0.583     | 0.216  | 0.315 |
+| Twitter                | GloVe     | 0.731     | 0.682  | 0.706 |
 
 #### Test
 
-| Dataset                | Precision | Recall | F1    |
-| ---------------------- | --------- | ------ | ----- |
-| SemEval2014-Laptop     | 0.595     | 0.159  | 0.251 |
-| SemEval2014-Restaurant | 0.727     | 0.135  | 0.228 |
-| Twitter                | 0.0       | 0.0    | 0.0   |
+| Dataset                | Embedding | Precision | Recall | F1    |
+| ---------------------- | --------- | --------- | ------ | ----- |
+| SemEval2014-Laptop     | GloVe     | 0.612     | 0.169  | 0.265 |
+| SemEval2014-Restaurant | GloVe     | 0.778     | 0.123  | 0.213 |
+| Twitter                | GloVe     | 0.681     | 0.676  | 0.678 |
 
 ## Citation
 
