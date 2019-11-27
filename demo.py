@@ -131,7 +131,7 @@ def main(*args, **kwargs):
     ]
     model.load_model('outputs' + '/' + 'model')
     inputs = dataset.merge_and_pad_all(s)
-    feed_dict = build_feed_dict(inputs, embedding_weights)
+    feed_dict = build_feed_dict(inputs)
     target_preds, sentiment_preds = model.predict_on_batch(feed_dict)
     get_sentiment_clue_vis([sent.split(' ') for sent in s], target_preds,
                            sentiment_preds,
