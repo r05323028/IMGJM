@@ -3,7 +3,7 @@
 # This software is released under the MIT License.
 # https://opensource.org/licenses/MIT
 from abc import ABCMeta
-from typing import Dict, List
+from typing import Dict, List, Tuple
 import numpy as np
 import tensorflow as tf
 import tf_metrics
@@ -266,7 +266,7 @@ class IMGJM(BaseModel):
                     self.C_sent, [i for i in range(1, self.C_sent)],
                     average=average)
 
-    def train_on_batch(self, inputs: Dict):
+    def train_on_batch(self, inputs: Dict) -> Tuple[float]:
         '''
         Train function of IMGJM
 
@@ -304,7 +304,7 @@ class IMGJM(BaseModel):
         tar_p, tar_r, tar_f1, sent_p, sent_r, sent_f1 = self.sess.run(metrics)
         return tar_p, tar_r, tar_f1, sent_p, sent_r, sent_f1
 
-    def test_on_batch(self, inputs: Dict):
+    def test_on_batch(self, inputs: Dict) -> Tuple[float]:
         '''
         Test function of IMGJM
 
@@ -341,7 +341,7 @@ class IMGJM(BaseModel):
         tar_p, tar_r, tar_f1, sent_p, sent_r, sent_f1 = self.sess.run(metrics)
         return tar_p, tar_r, tar_f1, sent_p, sent_r, sent_f1
 
-    def predict_on_batch(self, inputs: Dict):
+    def predict_on_batch(self, inputs: Dict) -> Tuple[np.ndarray]:
         '''
         Predict function of IMGJM
 
@@ -364,7 +364,7 @@ class IMGJM(BaseModel):
             [self.target_preds, self.sentiment_preds], feed_dict=feed_dict)
         return target_preds, sentiment_preds
 
-    def get_sentiment_clue(self, inputs: Dict):
+    def get_sentiment_clue(self, inputs: Dict) -> np.ndarray:
         feed_dict = {
             self.char_ids: inputs.get('char_ids'),
             self.word_ids: inputs.get('word_ids'),
