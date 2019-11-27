@@ -91,8 +91,7 @@ def get_sentiment_clue_vis(word: List, target: List, sentiment: List,
     plt.show()
 
 
-def build_feed_dict(input_tuple: Tuple[np.ndarray],
-                    embedding_weights: np.ndarray) -> Dict:
+def build_feed_dict(input_tuple: Tuple[np.ndarray]) -> Dict:
     pad_char_ids, pad_word_ids, sequence_length, pad_entities, pad_polarities = input_tuple
     feed_dict = {
         'char_ids': pad_char_ids,
@@ -100,7 +99,6 @@ def build_feed_dict(input_tuple: Tuple[np.ndarray],
         'sequence_length': sequence_length,
         'y_target': pad_entities,
         'y_sentiment': pad_polarities,
-        'glove_embedding': embedding_weights,
     }
     return feed_dict
 
@@ -128,7 +126,9 @@ def main(*args, **kwargs):
                   embedding_weights=embedding_weights,
                   batch_size=kwargs.get('batch_size'),
                   deploy=True)
-    s = ["not too expense and has enough storage for most users and many ports ."]
+    s = [
+        "not too expense and has enough storage for most users and many ports ."
+    ]
     model.load_model('outputs' + '/' + 'model')
     inputs = dataset.merge_and_pad_all(s)
     feed_dict = build_feed_dict(inputs, embedding_weights)
