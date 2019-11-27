@@ -73,7 +73,8 @@ pipenv run python train.py --mock_embedding=[True|False] --epochs=[nums]
 
 ## Case Study
 
-We also build a sentiment clue visualization tool to find the reason why sentiment prediction was produced. You can use `demo.py`
+We also build a sentiment clue visualization tool to find the reason why sentiment prediction was produced. 
+You can use `demo.py` to produce the following figure.
 
 ![Laptop_Test](doc/img/demo_laptop_uniform.png)
 
