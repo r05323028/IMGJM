@@ -2,7 +2,7 @@
 
 This repository is the TensorFlow implementation of **Interactive Multi-Grained Joint Model for Targeted Sentiment Analysis** which was accepted by ACM CIKM 2019.
 
-![Model](model.png)
+![Model](doc/img/model.png)
 
 ## Usage
 
@@ -70,6 +70,12 @@ pipenv run python train.py --mock_embedding=[True|False] --epochs=[nums]
 | SemEval2014-Laptop     | GloVe     | 0.612     | 0.169  | 0.265 |
 | SemEval2014-Restaurant | GloVe     | 0.778     | 0.123  | 0.213 |
 | Twitter                | GloVe     | 0.681     | 0.676  | 0.678 |
+
+## Case Study
+
+We also build a sentiment clue visualization tool to find the reason why sentiment prediction was produced. You can use `demo.py`
+
+![Laptop_Test](doc/img/demo_laptop_uniform.png)
 
 ## Citation
 
