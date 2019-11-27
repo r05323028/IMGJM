@@ -23,7 +23,8 @@ class BoolParser:
             return True
 
 
-def get_logger(logger_name: str = 'IMGJM', level: str = 'INFO'):
+def get_logger(logger_name: str = 'IMGJM',
+               level: str = 'INFO') -> logging.Logger:
     logger = logging.getLogger(logger_name)
     coloredlogs.install(
         level=level,
@@ -33,7 +34,7 @@ def get_logger(logger_name: str = 'IMGJM', level: str = 'INFO'):
     return logger
 
 
-def get_args():
+def get_args() -> Dict:
     arg_parser = ArgumentParser()
     arg_parser.add_argument('--batch_size', type=int, default=32)
     arg_parser.add_argument('--epochs', type=int, default=3)
