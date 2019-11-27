@@ -3,7 +3,7 @@
 # This software is released under the MIT License.
 # https://opensource.org/licenses/MIT
 from abc import ABCMeta
-from typing import Dict
+from typing import Dict, List
 import numpy as np
 import tensorflow as tf
 import tf_metrics
@@ -12,9 +12,15 @@ from IMGJM.layers import (CharEmbedding, GloveEmbedding, CoarseGrainedLayer,
 
 
 class BaseModel(metaclass=ABCMeta):
-    def build_tf_session(self, logdir: str, deploy: bool):
+    def build_tf_session(self,
+                         logdir: str,
+                         deploy: bool,
+                         var_list: List[tf.Variable] = None):
         self.sess = tf.Session()
-        self.saver = tf.train.Saver()
+        if var_list:
+            self.saver = tf.train.Saver(var_list=var_list)
+        else:
+            self.saver = tf.train.Saver()
         if not deploy:
             self.merged_all = tf.summary.merge_all()
             self.train_log_writer = tf.summary.FileWriter(
@@ -26,10 +32,10 @@ class BaseModel(metaclass=ABCMeta):
         self.sess.run(tf.global_variables_initializer())
         self.sess.run(tf.local_variables_initializer())
 
-    def save_model(self, model_dir: str = 'outputs/model'):
+    def save_model(self, model_dir: str):
         self.saver.save(sess=self.sess, save_path=model_dir)
 
-    def load_model(self, model_dir: str = 'outputs/model'):
+    def load_model(self, model_dir: str):
         self.saver.restore(sess=self.sess, save_path=model_dir)
 
 
@@ -99,7 +105,11 @@ class IMGJM(BaseModel):
 
         # build session
         self.build_model()
-        self.build_tf_session(logdir=logdir, deploy=deploy)
+        var_list = [
+            v for v in tf.global_variables()
+            if v.name != 'Placeholders/WordEmbedding:0'
+        ]
+        self.build_tf_session(logdir=logdir, deploy=deploy, var_list=var_list)
         self.initialize_weights()
         self.initialize_embedding(embedding_weights)
 
