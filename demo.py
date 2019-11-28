@@ -44,6 +44,7 @@ def get_args() -> Dict:
     arg_parser.add_argument('--mock_embedding',
                             type=BoolParser.parse,
                             default=False)
+    arg_parser.add_argument('--dataset', type=str, default='laptop')
     return vars(arg_parser.parse_args())
 
 
@@ -117,7 +118,12 @@ def main(*args, **kwargs):
     logger = get_logger()
     if kwargs.get('mock_embedding'):
         logger.info('Initializing dataset...')
-        dataset = SemEval2014()
+        if kwargs.get('dataset') == 'laptop':
+            dataset = SemEval2014()
+        elif kwargs.get('dataset') == 'rest':
+            dataset = SemEval2014()
+        else:
+            dataset = Twitter()
         vocab_size = len(dataset.char2id)
         logger.info('Dataset loaded.')
         logger.info('Build mock embedding')
@@ -128,8 +134,12 @@ def main(*args, **kwargs):
         word2id, embedding_weights, _ = build_glove_embedding()
         logger.info('Embeding loaded.')
         logger.info('Initializing dataset...')
-        # dataset = SemEval2014(word2id=word2id)
-        dataset = Twitter(word2id=word2id)
+        if kwargs.get('dataset') == 'laptop':
+            dataset = SemEval2014(word2id=word2id)
+        elif kwargs.get('dataset') == 'rest':
+            dataset = SemEval2014(word2id=word2id)
+        else:
+            dataset = Twitter(word2id=word2id)
         vocab_size = len(dataset.char2id)
         logger.info('Dataset loaded.')
     logger.info('Loading model...')
