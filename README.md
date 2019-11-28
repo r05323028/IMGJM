@@ -24,7 +24,7 @@ pipenv run python train.py --mock_embedding=[True|False]
 ### Plot Demo Figure
 
 ```bash
-pipenv run python train.py --mock_embedding=[True|False]
+pipenv run python demo.py --mock_embedding=[True|False]
 ```
 
 ## Performance
