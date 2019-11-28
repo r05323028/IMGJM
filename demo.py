@@ -119,9 +119,9 @@ def main(*args, **kwargs):
     if kwargs.get('mock_embedding'):
         logger.info('Initializing dataset...')
         if kwargs.get('dataset') == 'laptop':
-            dataset = SemEval2014()
+            dataset = SemEval2014(resource='laptop')
         elif kwargs.get('dataset') == 'rest':
-            dataset = SemEval2014()
+            dataset = SemEval2014(resource='rest')
         else:
             dataset = Twitter()
         vocab_size = len(dataset.char2id)
@@ -135,9 +135,9 @@ def main(*args, **kwargs):
         logger.info('Embeding loaded.')
         logger.info('Initializing dataset...')
         if kwargs.get('dataset') == 'laptop':
-            dataset = SemEval2014(word2id=word2id)
+            dataset = SemEval2014(word2id=word2id, resource='laptop')
         elif kwargs.get('dataset') == 'rest':
-            dataset = SemEval2014(word2id=word2id)
+            dataset = SemEval2014(word2id=word2id, resource='rest')
         else:
             dataset = Twitter(word2id=word2id)
         vocab_size = len(dataset.char2id)
@@ -151,7 +151,9 @@ def main(*args, **kwargs):
                   **config['custom'])
     logger.info('Model loaded.')
     model.load_model('outputs' + '/' + 'model')
-    s = ["windows 7 gaming and support sucks . no shock here ."]
+    s = [
+        "i ordered my 2012 mac mini after being disappointed with spec of the new 27 ' imacs ."
+    ]
     inputs = dataset.merge_and_pad_all(s)
     feed_dict = build_feed_dict(inputs)
     target_preds, sentiment_preds = model.predict_on_batch(feed_dict)

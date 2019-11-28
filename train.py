@@ -72,9 +72,9 @@ def main(*args, **kwargs):
     if kwargs.get('mock_embedding'):
         logger.info('Initializing dataset...')
         if kwargs.get('dataset') == 'laptop':
-            dataset = SemEval2014()
+            dataset = SemEval2014(resource='laptop')
         elif kwargs.get('dataset') == 'rest':
-            dataset = SemEval2014()
+            dataset = SemEval2014(resource='rest')
         else:
             dataset = Twitter()
         vocab_size = len(dataset.char2id)
@@ -88,9 +88,9 @@ def main(*args, **kwargs):
         logger.info('Embeding loaded.')
         logger.info('Initializing dataset...')
         if kwargs.get('dataset') == 'laptop':
-            dataset = SemEval2014(word2id=word2id)
+            dataset = SemEval2014(word2id=word2id, resource='laptop')
         elif kwargs.get('dataset') == 'rest':
-            dataset = SemEval2014(word2id=word2id)
+            dataset = SemEval2014(word2id=word2id, resource='rest')
         else:
             dataset = Twitter(word2id=word2id)
         vocab_size = len(dataset.char2id)
