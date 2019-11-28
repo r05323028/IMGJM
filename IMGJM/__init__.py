@@ -50,6 +50,7 @@ class IMGJM(BaseModel):
         learning_rate (float) 
         embedding_size (int) 
         hidden_nums (int) 
+        dropout (bool)
         dropout_rate (float) 
         kernel_size (int) 
         filter_nums (int) 
@@ -64,6 +65,7 @@ class IMGJM(BaseModel):
                  batch_size: int = 32,
                  learning_rate: float = 0.001,
                  hidden_nums: int = 700,
+                 dropout: bool = True,
                  dropout_rate: float = 0.5,
                  kernel_size: int = 3,
                  filter_nums: int = 50,
@@ -83,6 +85,7 @@ class IMGJM(BaseModel):
         self.embedding_shape = embedding_weights.shape
         self.batch_size = batch_size
         self.learning_rate = learning_rate
+        self.dropout = dropout
         self.dropout_rate = dropout_rate
         self.kernel_size = kernel_size
         self.filter_nums = filter_nums
@@ -105,6 +108,7 @@ class IMGJM(BaseModel):
 
         # build session
         self.build_model()
+        self.build_metrics()
         var_list = [
             v for v in tf.global_variables()
             if v.name != 'Placeholders/WordEmbedding:0'
@@ -143,12 +147,13 @@ class IMGJM(BaseModel):
             self.char_e = char_embedding
             word_embedding = self.word_embedding(
                 self.word_ids, embedding_placeholder=self.glove_embedding)
-            char_embedding = tf.layers.dropout(char_embedding,
-                                               rate=self.dropout_rate,
-                                               training=self.training)
-            word_embedding = tf.layers.dropout(word_embedding,
-                                               rate=self.dropout_rate,
-                                               training=self.training)
+            if self.dropout:
+                char_embedding = tf.layers.dropout(char_embedding,
+                                                   rate=self.dropout_rate,
+                                                   training=self.training)
+                word_embedding = tf.layers.dropout(word_embedding,
+                                                   rate=self.dropout_rate,
+                                                   training=self.training)
             coarse_grained_target, self.sentiment_clue, hidden_states = self.coarse_grained_layer(
                 char_embedding, word_embedding, self.sequence_length)
             interacted_target, interacted_sentiment = self.interaction_layer(
@@ -156,13 +161,15 @@ class IMGJM(BaseModel):
             multi_grained_target, multi_grained_sentiment = self.fine_grained_layer(
                 interacted_target, interacted_sentiment, hidden_states,
                 self.sequence_length)
-            multi_grained_target = tf.layers.dropout(multi_grained_target,
-                                                     rate=self.dropout_rate,
-                                                     training=self.training)
-            multi_grained_sentiment = tf.layers.dropout(
-                multi_grained_sentiment,
-                rate=self.dropout_rate,
-                training=self.training)
+            if self.dropout:
+                multi_grained_target = tf.layers.dropout(
+                    multi_grained_target,
+                    rate=self.dropout_rate,
+                    training=self.training)
+                multi_grained_sentiment = tf.layers.dropout(
+                    multi_grained_sentiment,
+                    rate=self.dropout_rate,
+                    training=self.training)
         with tf.name_scope('CRF'):
             with tf.name_scope('Target'), tf.variable_scope(
                     'Target_Variables', reuse=tf.AUTO_REUSE):
@@ -201,6 +208,8 @@ class IMGJM(BaseModel):
                 potentials=multi_grained_sentiment,
                 transition_params=sentiment_trans_params,
                 sequence_length=self.sequence_length)
+
+    def build_metrics(self):
         with tf.name_scope('Metrics'):
             average = 'micro'
             with tf.name_scope('Train'):

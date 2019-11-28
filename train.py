@@ -4,6 +4,7 @@ Training script for IMGJM
 from typing import Dict, Tuple
 from argparse import ArgumentParser
 import logging
+import yaml
 import coloredlogs
 import numpy as np
 from tqdm import tqdm, trange
@@ -37,6 +38,9 @@ def get_args() -> Dict:
     arg_parser.add_argument('--batch_size', type=int, default=32)
     arg_parser.add_argument('--epochs', type=int, default=3)
     arg_parser.add_argument('--model_dir', type=str, default='outputs')
+    arg_parser.add_argument('--model_config_fp',
+                            type=str,
+                            default='model_settings.yml')
     arg_parser.add_argument('--mock_embedding',
                             type=BoolParser.parse,
                             default=False)
@@ -53,6 +57,12 @@ def build_feed_dict(input_tuple: Tuple[np.ndarray]) -> Dict:
         'y_sentiment': pad_polarities,
     }
     return feed_dict
+
+
+def load_model_config(file_path: str) -> Dict:
+    with open(file_path, 'r') as file:
+        config = yaml.load(file, Loader=yaml.FullLoader)
+        return config
 
 
 def main(*args, **kwargs):
@@ -74,10 +84,14 @@ def main(*args, **kwargs):
         dataset = SemEval2014(word2id=word2id)
         vocab_size = len(dataset.char2id)
         logger.info('Dataset loaded.')
-    logger.info('Start training...')
+    logger.info('Loading model...')
+    config = load_model_config(kwargs.get('model_config_fp'))
     model = IMGJM(char_vocab_size=vocab_size,
                   embedding_weights=embedding_weights,
-                  batch_size=kwargs.get('batch_size'))
+                  dropout=False,
+                  **config['custom'])
+    logger.info('Model loaded.')
+    logger.info('Start training...')
     for _ in trange(kwargs.get('epochs'), desc='epoch'):
         train_batch_generator = tqdm(
             dataset.batch_generator(batch_size=kwargs.get('batch_size')),

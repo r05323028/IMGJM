@@ -17,16 +17,25 @@ pipenv install
 ### Train Model
 
 ```bash
-pipenv run python train.py --mock_embedding=[True|False] --epochs=[nums]
+pipenv run python train.py --mock_embedding=[True|False] 
+                           --epochs=[nums]
+```
+
+### Plot Demo Figure
+
+```bash
+pipenv run python train.py --mock_embedding=[True|False]
 ```
 
 ## Performance
 
+We temporarily remove dropout layers because we don't know the correct positions they should be placed and they affect the performance dramatically.
+
 - Word embedding: GloVe.840B.300D
-- Model setting
+- Model settings
   - epochs: 50
   - learning_rate: 0.001
-  - dropout_rate: 0.5
+  - **dropout_rate: 0.0**
   - batch_size: 32
   - kernel_size: 3
   - filter_nums: 50
@@ -39,37 +48,37 @@ pipenv run python train.py --mock_embedding=[True|False] --epochs=[nums]
 
 #### Train
 
-| Dataset                | Embedding | Precision | Recall | F1    |
-| ---------------------- | --------- | --------- | ------ | ----- |
-| SemEval2014-Laptop     | GloVe     | 0.416     | 0.353  | 0.382 |
-| SemEval2014-Restaurant | GloVe     | 0.463     | 0.267  | 0.339 |
-| Twitter                | GloVe     | 0.834     | 0.886  | 0.859 |
+| Dataset                | Dropout | Embedding | Precision | Recall | F1    |
+| ---------------------- | ------- | --------- | --------- | ------ | ----- |
+| SemEval2014-Laptop     | 0.0     | GloVe     | 0.768     | 0.531  | 0.628 |
+| SemEval2014-Restaurant | 0.0     | GloVe     | 0.776     | 0.564  | 0.653 |
+| Twitter                | 0.0     | GloVe     | 0.998     | 0.996  | 0.997 |
 
 #### Test
 
-| Dataset                | Embedding | Precision | Recall | F1    |
-| ---------------------- | --------- | --------- | ------ | ----- |
-| SemEval2014-Laptop     | GloVe     | 0.791     | 0.329  | 0.465 |
-| SemEval2014-Restaurant | GloVe     | 0.884     | 0.189  | 0.311 |
-| Twitter                | GloVe     | 0.992     | 0.990  | 0.991 |
+| Dataset                | Dropout | Embedding | Precision | Recall | F1    |
+| ---------------------- | ------- | --------- | --------- | ------ | ----- |
+| SemEval2014-Laptop     | 0.0     | GloVe     | 0.679     | 0.433  | 0.529 |
+| SemEval2014-Restaurant | 0.0     | GloVe     | 0.632     | 0.318  | 0.423 |
+| Twitter                | 0.0     | GloVe     | 0.990     | 0.987  | 0.989 |
 
 ### Sentiment Analysis
 
 #### Train
 
-| Dataset                | Embedding | Precision | Recall | F1    |
-| ---------------------- | --------- | --------- | ------ | ----- |
-| SemEval2014-Laptop     | GloVe     | 0.574     | 0.261  | 0.359 |
-| SemEval2014-Restaurant | GloVe     | 0.583     | 0.216  | 0.315 |
-| Twitter                | GloVe     | 0.731     | 0.682  | 0.706 |
+| Dataset                | Dropout | Embedding | Precision | Recall | F1    |
+| ---------------------- | ------- | --------- | --------- | ------ | ----- |
+| SemEval2014-Laptop     | 0.0     | GloVe     | 0.743     | 0.507  | 0.603 |
+| SemEval2014-Restaurant | 0.0     | GloVe     | 0.771     | 0.532  | 0.630 |
+| Twitter                | 0.0     | GloVe     | 0.957     | 0.954  | 0.955 |
 
 #### Test
 
-| Dataset                | Embedding | Precision | Recall | F1    |
-| ---------------------- | --------- | --------- | ------ | ----- |
-| SemEval2014-Laptop     | GloVe     | 0.612     | 0.169  | 0.265 |
-| SemEval2014-Restaurant | GloVe     | 0.778     | 0.123  | 0.213 |
-| Twitter                | GloVe     | 0.681     | 0.676  | 0.678 |
+| Dataset                | Dropout | Embedding | Precision | Recall | F1    |
+| ---------------------- | ------- | --------- | --------- | ------ | ----- |
+| SemEval2014-Laptop     | 0.0     | GloVe     | 0.474     | 0.285  | 0.356 |
+| SemEval2014-Restaurant | 0.0     | GloVe     | 0.539     | 0.230  | 0.322 |
+| Twitter                | 0.0     | GloVe     | 0.668     | 0.665  | 0.666 |
 
 ## Case Study
 

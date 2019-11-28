@@ -16,6 +16,7 @@ tqdm = "*"
 coloredlogs = "*"
 matplotlib = "*"
 tf-metrics = {editable = true,git = "https://github.com/guillaumegenthial/tf_metrics.git"}
+pyyaml = "*"
 
 [requires]
 python_version = "3.6"
