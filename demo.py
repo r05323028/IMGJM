@@ -128,7 +128,8 @@ def main(*args, **kwargs):
         word2id, embedding_weights, _ = build_glove_embedding()
         logger.info('Embeding loaded.')
         logger.info('Initializing dataset...')
-        dataset = SemEval2014(word2id=word2id)
+        # dataset = SemEval2014(word2id=word2id)
+        dataset = Twitter(word2id=word2id)
         vocab_size = len(dataset.char2id)
         logger.info('Dataset loaded.')
     logger.info('Loading model...')
@@ -139,8 +140,8 @@ def main(*args, **kwargs):
                   deploy=True,
                   **config['custom'])
     logger.info('Model loaded.')
-    s = ["net zo bad als micheal jackson ' s bad ."]
     model.load_model('outputs' + '/' + 'model')
+    s = ["windows 7 gaming and support sucks . no shock here ."]
     inputs = dataset.merge_and_pad_all(s)
     feed_dict = build_feed_dict(inputs)
     target_preds, sentiment_preds = model.predict_on_batch(feed_dict)
