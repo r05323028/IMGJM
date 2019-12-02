@@ -155,7 +155,7 @@ def main(*args, **kwargs):
         elif kwargs.get('dataset') == 'rest':
             dataset = SemEval2014(word2id=word2id, resource='rest')
         elif kwargs.get('dataset') == 'kkbox':
-            dataset = KKBOXSentimentData()
+            dataset = KKBOXSentimentData(word2id=word2id)
         else:
             dataset = Twitter(word2id=word2id)
         vocab_size = len(dataset.char2id)
