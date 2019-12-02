@@ -26,7 +26,7 @@ pipenv run python train.py --embedding=[fasttext|glove|mock] \
 
 ```bash
 pipenv run python demo.py --mock_embedding=[True|False] \
-                          --dataset=[rest|laptop|kkbox|twitter] \
+                          --dataset=[rest|laptop|kkbox|twitter]
 ```
 
 ## Performance
