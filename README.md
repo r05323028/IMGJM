@@ -17,14 +17,16 @@ pipenv install
 ### Train Model
 
 ```bash
-pipenv run python train.py --embedding=[fasttext|glove|mock]
+pipenv run python train.py --embedding=[fasttext|glove|mock] \
+                           --dataset=[rest|laptop|kkbox|twitter] \
                            --epochs=[nums]
 ```
 
 ### Plot Demo Figure
 
 ```bash
-pipenv run python demo.py --mock_embedding=[True|False]
+pipenv run python demo.py --mock_embedding=[True|False] \
+                          --dataset=[rest|laptop|kkbox|twitter] \
 ```
 
 ## Performance
