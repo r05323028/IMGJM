@@ -61,7 +61,9 @@ class IMGJM(BaseModel):
     '''
     def __init__(self,
                  char_vocab_size: int,
-                 embedding_weights: np.ndarray,
+                 embedding_weights: np.ndarray = None,
+                 embedding_size: int = 300,
+                 input_type: str = 'ids',
                  batch_size: int = 32,
                  learning_rate: float = 0.001,
                  hidden_nums: int = 700,
@@ -79,10 +81,14 @@ class IMGJM(BaseModel):
                  **kwargs):
         # attributes
         self.char_vocab_size = char_vocab_size
-        self.word_vocab_size = embedding_weights.shape[0]
-        self.embedding_size = embedding_weights.shape[1]
-        self.embedding_weights = embedding_weights
-        self.embedding_shape = embedding_weights.shape
+        self.input_type = input_type
+        if self.input_type == 'ids':
+            self.embedding_weights = embedding_weights
+            self.word_vocab_size = embedding_weights.shape[0]
+            self.embedding_size = embedding_weights.shape[1]
+            self.embedding_shape = embedding_weights.shape
+        else:
+            self.embedding_size = embedding_size
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.dropout = dropout
@@ -97,7 +103,8 @@ class IMGJM(BaseModel):
 
         # layers
         self.char_embedding = CharEmbedding(vocab_size=char_vocab_size)
-        self.word_embedding = GloveEmbedding()
+        if self.input_type == 'ids':
+            self.word_embedding = GloveEmbedding()
         self.coarse_grained_layer = CoarseGrainedLayer(hidden_nums=hidden_nums)
         self.interaction_layer = Interaction(hidden_nums=hidden_nums,
                                              C_tar=C_tar,
@@ -115,7 +122,8 @@ class IMGJM(BaseModel):
         ]
         self.build_tf_session(logdir=logdir, deploy=deploy, var_list=var_list)
         self.initialize_weights()
-        self.initialize_embedding(embedding_weights)
+        if input_type == 'ids':
+            self.initialize_embedding(embedding_weights)
 
     def initialize_embedding(self, embedding_weights: np.ndarray):
         with tf.name_scope('Initializing'):
@@ -130,23 +138,31 @@ class IMGJM(BaseModel):
         Model building function
         '''
         with tf.name_scope('Placeholders'):
-            self.word_ids = tf.placeholder(dtype=tf.int32, shape=[None, None])
+            if self.input_type == 'ids':
+                self.word_ids = tf.placeholder(dtype=tf.int32,
+                                               shape=[None, None])
+                self.glove_embedding = tf.Variable(tf.constant(
+                    0.0, shape=self.embedding_shape),
+                                                   trainable=False,
+                                                   name='WordEmbedding')
+            else:
+                self.word_embedding = tf.placeholder(
+                    dtype=tf.float32, shape=[None, None, self.embedding_size])
             self.char_ids = tf.placeholder(dtype=tf.int32,
                                            shape=[None, None, None])
             self.sequence_length = tf.placeholder(dtype=tf.int32, shape=[None])
             self.y_target = tf.placeholder(dtype=tf.int32, shape=[None, None])
             self.y_sentiment = tf.placeholder(dtype=tf.int32,
                                               shape=[None, None])
-            self.glove_embedding = tf.Variable(tf.constant(
-                0.0, shape=self.embedding_shape),
-                                               trainable=False,
-                                               name='WordEmbedding')
             self.training = tf.placeholder(dtype=tf.bool)
         with tf.name_scope('Hidden_layers'):
             char_embedding = self.char_embedding(self.char_ids)
             self.char_e = char_embedding
-            word_embedding = self.word_embedding(
-                self.word_ids, embedding_placeholder=self.glove_embedding)
+            if self.input_type == 'ids':
+                word_embedding = self.word_embedding(
+                    self.word_ids, embedding_placeholder=self.glove_embedding)
+            else:
+                word_embedding = self.word_embedding
             if self.dropout:
                 char_embedding = tf.layers.dropout(char_embedding,
                                                    rate=self.dropout_rate,
@@ -290,14 +306,24 @@ class IMGJM(BaseModel):
             sent_r (float) 
             sent_f1 (float) 
         '''
-        feed_dict = {
-            self.char_ids: inputs.get('char_ids'),
-            self.word_ids: inputs.get('word_ids'),
-            self.sequence_length: inputs.get('sequence_length'),
-            self.y_target: inputs.get('y_target'),
-            self.y_sentiment: inputs.get('y_sentiment'),
-            self.training: True
-        }
+        if self.input_type == 'ids':
+            feed_dict = {
+                self.char_ids: inputs.get('char_ids'),
+                self.word_ids: inputs.get('word_ids'),
+                self.sequence_length: inputs.get('sequence_length'),
+                self.y_target: inputs.get('y_target'),
+                self.y_sentiment: inputs.get('y_sentiment'),
+                self.training: True
+            }
+        else:
+            feed_dict = {
+                self.char_ids: inputs.get('char_ids'),
+                self.word_embedding: inputs.get('word_embedding'),
+                self.sequence_length: inputs.get('sequence_length'),
+                self.y_target: inputs.get('y_target'),
+                self.y_sentiment: inputs.get('y_sentiment'),
+                self.training: True
+            }
         metrics_ops = [
             self.train_target_precision_op, self.train_target_recall_op,
             self.train_target_f1_op, self.train_sentiment_precision_op,
@@ -328,14 +354,24 @@ class IMGJM(BaseModel):
             sent_r (float) 
             sent_f1 (float) 
         '''
-        feed_dict = {
-            self.char_ids: inputs.get('char_ids'),
-            self.word_ids: inputs.get('word_ids'),
-            self.sequence_length: inputs.get('sequence_length'),
-            self.y_target: inputs.get('y_target'),
-            self.y_sentiment: inputs.get('y_sentiment'),
-            self.training: False
-        }
+        if self.input_type == 'ids':
+            feed_dict = {
+                self.char_ids: inputs.get('char_ids'),
+                self.word_ids: inputs.get('word_ids'),
+                self.sequence_length: inputs.get('sequence_length'),
+                self.y_target: inputs.get('y_target'),
+                self.y_sentiment: inputs.get('y_sentiment'),
+                self.training: True
+            }
+        else:
+            feed_dict = {
+                self.char_ids: inputs.get('char_ids'),
+                self.word_embedding: inputs.get('word_embedding'),
+                self.sequence_length: inputs.get('sequence_length'),
+                self.y_target: inputs.get('y_target'),
+                self.y_sentiment: inputs.get('y_sentiment'),
+                self.training: True
+            }
         metrics_ops = [
             self.test_target_precision_op, self.test_target_recall_op,
             self.test_target_f1_op, self.test_sentiment_precision_op,
@@ -361,14 +397,24 @@ class IMGJM(BaseModel):
             target_preds (np.ndarray)
             sentiment_preds (np.ndarray)
         '''
-        feed_dict = {
-            self.char_ids: inputs.get('char_ids'),
-            self.word_ids: inputs.get('word_ids'),
-            self.sequence_length: inputs.get('sequence_length'),
-            self.y_target: inputs.get('y_target'),
-            self.y_sentiment: inputs.get('y_sentiment'),
-            self.training: False
-        }
+        if self.input_type == 'ids':
+            feed_dict = {
+                self.char_ids: inputs.get('char_ids'),
+                self.word_ids: inputs.get('word_ids'),
+                self.sequence_length: inputs.get('sequence_length'),
+                self.y_target: inputs.get('y_target'),
+                self.y_sentiment: inputs.get('y_sentiment'),
+                self.training: True
+            }
+        else:
+            feed_dict = {
+                self.char_ids: inputs.get('char_ids'),
+                self.word_embedding: inputs.get('word_embedding'),
+                self.sequence_length: inputs.get('sequence_length'),
+                self.y_target: inputs.get('y_target'),
+                self.y_sentiment: inputs.get('y_sentiment'),
+                self.training: True
+            }
         target_preds, sentiment_preds = self.sess.run(
             [self.target_preds, self.sentiment_preds], feed_dict=feed_dict)
         return target_preds, sentiment_preds

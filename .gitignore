@@ -4,9 +4,12 @@
 // python
 __pycache__
 .pytest_cache
+format_kkbox_data.py
+split_dataset.py
 
 // dataset
 embeddings/*
+dataset/kkbox/*
 
 // model outputs
 logs

@@ -7,6 +7,8 @@ import random
 from abc import ABCMeta
 from pathlib import Path
 from typing import List, Tuple, Dict
+from itertools import zip_longest
+import fasttext
 from more_itertools import flatten
 import numpy as np
 import tensorflow as tf
@@ -221,9 +223,9 @@ class BaseDataset(metaclass=ABCMeta):
         start, end = 0, batch_size
         batch_nums = (len(dataset) // batch_size) + 1
         for _ in range(batch_nums):
-            pad_char_ids, pad_word_ids, sequence_length, pad_entities, pad_polarities = self.merge_and_pad_all(
+            pad_char_ids, pad_word_batch, sequence_length, pad_entities, pad_polarities = self.merge_and_pad_all(
                 dataset[start:end])
-            yield (pad_char_ids, pad_word_ids, sequence_length, pad_entities,
+            yield (pad_char_ids, pad_word_batch, sequence_length, pad_entities,
                    pad_polarities)
             start, end = end, end + batch_size
 
@@ -257,3 +259,47 @@ class Twitter(BaseDataset):
                                       word2id=word2id,
                                       *args,
                                       **kwargs)
+
+
+class KKBOXSentimentData(BaseDataset):
+    def __init__(self,
+                 data_dir: str = 'kkbox',
+                 char2id: Dict = None,
+                 word2id: Dict = None,
+                 fasttext_model_fp: str = 'embeddings/wiki.zh.bin',
+                 *args,
+                 **kwargs):
+        super(KKBOXSentimentData, self).__init__(data_dir=data_dir,
+                                                 char2id=char2id,
+                                                 word2id=word2id,
+                                                 *args,
+                                                 **kwargs)
+        self.fasttext_model = fasttext.load_model(fasttext_model_fp)
+
+    def merge_and_pad_all(self, sentences: List[str]) -> Tuple[np.ndarray]:
+        sents, entities, polarities = self.format_dataset(sentences)
+        char_ids, word_ids = self.transform(sents)
+        pad_char_ids = pad_char_sequences(char_ids,
+                                          padding='post',
+                                          value=len(self.char2id))
+        sequence_length = [len(sent) for sent in word_ids]
+        pad_word_vecs = self.word2vec(sents, max_sent_len=max(sequence_length))
+        pad_entities = tf.keras.preprocessing.sequence.pad_sequences(
+            entities, padding='post', value=0)
+        pad_polarities = tf.keras.preprocessing.sequence.pad_sequences(
+            polarities, padding='post', value=0)
+        return pad_char_ids, pad_word_vecs, sequence_length, pad_entities, pad_polarities
+
+    def word2vec(self, sentences: List[List], max_sent_len: int) -> np.ndarray:
+        res = []
+        for sent in sentences:
+            vecs = []
+            for _, word in zip_longest(range(max_sent_len), sent):
+                if word:
+                    vec = self.fasttext_model.get_word_vector(word)
+                    vecs.append(vec)
+                else:
+                    vecs.append(
+                        np.zeros(shape=[self.fasttext_model.get_dimension()]))
+            res.append(vecs)
+        return np.array(res)

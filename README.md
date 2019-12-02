@@ -17,7 +17,7 @@ pipenv install
 ### Train Model
 
 ```bash
-pipenv run python train.py --mock_embedding=[True|False] 
+pipenv run python train.py --embedding=[fasttext|glove|mock]
                            --epochs=[nums]
 ```
 

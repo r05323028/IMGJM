@@ -1,3 +1,7 @@
+# Copyright (c) 2019 seanchang
+#
+# This software is released under the MIT License.
+# https://opensource.org/licenses/MIT
 '''
 Demo script for IMGJM
 '''
@@ -11,7 +15,7 @@ from tqdm import tqdm, trange
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
 from IMGJM import IMGJM
-from IMGJM.data import (SemEval2014, Twitter)
+from IMGJM.data import (SemEval2014, Twitter, KKBOXSentimentData)
 from IMGJM.utils import build_glove_embedding, build_mock_embedding
 
 
@@ -41,9 +45,7 @@ def get_args() -> Dict:
     arg_parser.add_argument('--model_config_fp',
                             type=str,
                             default='model_settings.yml')
-    arg_parser.add_argument('--mock_embedding',
-                            type=BoolParser.parse,
-                            default=False)
+    arg_parser.add_argument('--embedding', type=str, default='glove')
     arg_parser.add_argument('--dataset', type=str, default='laptop')
     return vars(arg_parser.parse_args())
 
@@ -95,16 +97,28 @@ def get_sentiment_clue_vis(word: List, target: List, sentiment: List,
     plt.show()
 
 
-def build_feed_dict(input_tuple: Tuple[np.ndarray]) -> Dict:
-    pad_char_ids, pad_word_ids, sequence_length, pad_entities, pad_polarities = input_tuple
-    feed_dict = {
-        'char_ids': pad_char_ids,
-        'word_ids': pad_word_ids,
-        'sequence_length': sequence_length,
-        'y_target': pad_entities,
-        'y_sentiment': pad_polarities,
-    }
-    return feed_dict
+def build_feed_dict(input_tuple: Tuple[np.ndarray],
+                    input_type: str = 'ids') -> Dict:
+    if input_type == 'ids':
+        pad_char_ids, pad_word_ids, sequence_length, pad_entities, pad_polarities = input_tuple
+        feed_dict = {
+            'char_ids': pad_char_ids,
+            'word_ids': pad_word_ids,
+            'sequence_length': sequence_length,
+            'y_target': pad_entities,
+            'y_sentiment': pad_polarities,
+        }
+        return feed_dict
+    else:
+        pad_char_ids, pad_word_embedding, sequence_length, pad_entities, pad_polarities = input_tuple
+        feed_dict = {
+            'char_ids': pad_char_ids,
+            'word_embedding': pad_word_embedding,
+            'sequence_length': sequence_length,
+            'y_target': pad_entities,
+            'y_sentiment': pad_polarities,
+        }
+        return feed_dict
 
 
 def load_model_config(file_path: str) -> Dict:
@@ -116,12 +130,14 @@ def load_model_config(file_path: str) -> Dict:
 def main(*args, **kwargs):
     np.random.seed(1234)
     logger = get_logger()
-    if kwargs.get('mock_embedding'):
+    if kwargs.get('embedding') == 'mock':
         logger.info('Initializing dataset...')
         if kwargs.get('dataset') == 'laptop':
             dataset = SemEval2014(resource='laptop')
         elif kwargs.get('dataset') == 'rest':
             dataset = SemEval2014(resource='rest')
+        elif kwargs.get('dataset') == 'kkbox':
+            dataset = KKBOXSentimentData()
         else:
             dataset = Twitter()
         vocab_size = len(dataset.char2id)
@@ -129,7 +145,7 @@ def main(*args, **kwargs):
         logger.info('Build mock embedding')
         _, embedding_weights = build_mock_embedding(dataset.word2id)
         logger.info('Building mock embedding finished')
-    else:
+    elif kwargs.get('embedding') == 'glove':
         logger.info('Loading Glove embedding...')
         word2id, embedding_weights, _ = build_glove_embedding()
         logger.info('Embeding loaded.')
@@ -138,24 +154,51 @@ def main(*args, **kwargs):
             dataset = SemEval2014(word2id=word2id, resource='laptop')
         elif kwargs.get('dataset') == 'rest':
             dataset = SemEval2014(word2id=word2id, resource='rest')
+        elif kwargs.get('dataset') == 'kkbox':
+            dataset = KKBOXSentimentData()
         else:
             dataset = Twitter(word2id=word2id)
         vocab_size = len(dataset.char2id)
         logger.info('Dataset loaded.')
+    elif kwargs.get('embedding') == 'fasttext':
+        logger.info('Initializing dataset...')
+        if kwargs.get('dataset') == 'laptop':
+            dataset = SemEval2014(resource='laptop')
+        elif kwargs.get('dataset') == 'rest':
+            dataset = SemEval2014(resource='rest')
+        elif kwargs.get('dataset') == 'kkbox':
+            dataset = KKBOXSentimentData()
+        else:
+            dataset = Twitter()
+        vocab_size = len(dataset.char2id)
+        logger.info('Dataset loaded.')
+    else:
+        logger.warning('Invalid embedding choice.')
     logger.info('Loading model...')
     config = load_model_config(kwargs.get('model_config_fp'))
-    model = IMGJM(char_vocab_size=vocab_size,
-                  embedding_weights=embedding_weights,
-                  dropout=False,
-                  deploy=True,
-                  **config['custom'])
+    if kwargs.get('embedding') == 'fasttext':
+        model = IMGJM(char_vocab_size=vocab_size,
+                      embedding_size=dataset.fasttext_model.get_dimension(),
+                      input_type='embedding',
+                      dropout=False,
+                      deploy=True,
+                      **config['custom'])
+    else:
+        model = IMGJM(char_vocab_size=vocab_size,
+                      embedding_weights=embedding_weights,
+                      dropout=False,
+                      deploy=True,
+                      **config['custom'])
     logger.info('Model loaded.')
     model.load_model('outputs' + '/' + 'model')
     s = [
         "i ordered my 2012 mac mini after being disappointed with spec of the new 27 ' imacs ."
     ]
     inputs = dataset.merge_and_pad_all(s)
-    feed_dict = build_feed_dict(inputs)
+    if kwargs.get('embedding') == 'fasttext':
+        feed_dict = build_feed_dict(inputs, input_type='embedding')
+    else:
+        feed_dict = build_feed_dict(inputs, input_type='ids')
     target_preds, sentiment_preds = model.predict_on_batch(feed_dict)
     get_sentiment_clue_vis([sent.split(' ') for sent in s], target_preds,
                            sentiment_preds,
