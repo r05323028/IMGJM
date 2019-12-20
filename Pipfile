@@ -20,6 +20,7 @@ pyyaml = "*"
 fasttext = "*"
 openpyxl = "*"
 jieba = "*"
+sklearn = "*"
 
 [requires]
 python_version = "3.6"

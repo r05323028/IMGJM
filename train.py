@@ -12,6 +12,7 @@ import yaml
 import coloredlogs
 import numpy as np
 from tqdm import tqdm, trange
+from sklearn.metrics import multilabel_confusion_matrix, confusion_matrix
 from IMGJM import IMGJM
 from IMGJM.data import (SemEval2014, Twitter, KKBOXSentimentData)
 from IMGJM.utils import build_glove_embedding, build_mock_embedding
@@ -80,6 +81,44 @@ def load_model_config(file_path: str) -> Dict:
         return config
 
 
+def get_confusion_matrix(feed_dict: Dict,
+                         model: IMGJM,
+                         C_tar: int = 5,
+                         C_sent: int = 7,
+                         *args,
+                         **kwargs) -> Tuple[np.ndarray]:
+    '''
+    Get target and sentiment confusion matrix
+
+    Args:
+        feed_dict (dict): model inputs.
+        model (IMGJM): model.
+        C_tar (int): target class numbers.
+        C_sent (int): sentiment class numbers.
+
+    Returns:
+        target_cm (np.ndarray): target confusion matrix.
+        sentiment_cm (np.ndarray): sentiment confusion matrix.
+    '''
+    target_preds, sentiment_preds = model.predict_on_batch(feed_dict)
+    target_labels = feed_dict.get('y_target')
+    sentiment_labels = feed_dict.get('y_sentiment')
+
+    target_confusion_matrix = confusion_matrix(
+        np.reshape(target_labels,
+                   (target_labels.shape[0] * target_labels.shape[1])),
+        np.reshape(target_preds,
+                   (target_preds.shape[0] * target_preds.shape[1])),
+        labels=list(range(C_tar)))
+    sentiment_confusion_matrix = confusion_matrix(
+        np.reshape(sentiment_labels,
+                   (sentiment_labels.shape[0] * sentiment_labels.shape[1])),
+        np.reshape(sentiment_preds,
+                   (sentiment_preds.shape[0] * sentiment_preds.shape[1])),
+        labels=list(range(C_sent)))
+    return target_confusion_matrix, sentiment_confusion_matrix
+
+
 def main(*args, **kwargs):
     np.random.seed(1234)
     logger = get_logger()
@@ -142,10 +181,16 @@ def main(*args, **kwargs):
                       **config['custom'])
     logger.info('Model loaded.')
     logger.info('Start training...')
+    C_tar = config['custom'].get('C_tar')
+    C_sent = config['custom'].get('C_sent')
     for _ in trange(kwargs.get('epochs'), desc='epoch'):
+        # Train
         train_batch_generator = tqdm(
             dataset.batch_generator(batch_size=kwargs.get('batch_size')),
             desc='training')
+        target_cm, sentiment_cm = np.zeros(
+            (1, C_tar, C_tar), dtype=np.int32), np.zeros((1, C_sent, C_sent),
+                                                         dtype=np.int32)
         for input_tuple in train_batch_generator:
             if kwargs.get('embedding') == 'fasttext':
                 feed_dict = build_feed_dict(input_tuple,
@@ -154,12 +199,28 @@ def main(*args, **kwargs):
                 feed_dict = build_feed_dict(input_tuple, input_type='ids')
             tar_p, tar_r, tar_f1, sent_p, sent_r, sent_f1 = model.train_on_batch(
                 feed_dict)
+            temp_target_cm, temp_sentiment_cm = get_confusion_matrix(
+                feed_dict, model, C_tar=C_tar, C_sent=C_sent)
+            target_cm = np.append(target_cm,
+                                  np.expand_dims(temp_target_cm, axis=0),
+                                  axis=0)
+            sentiment_cm = np.append(sentiment_cm,
+                                     np.expand_dims(temp_sentiment_cm, axis=0),
+                                     axis=0)
             train_batch_generator.set_description(
                 f'[Train][Target]: p-{tar_p:.3f}, r-{tar_r:.3f}, f1-{tar_f1:.3f} [Senti]: p-{sent_p:.3f}, r-{sent_r:.3f}, f1-{sent_f1:.3f}'
             )
+        train_batch_generator.write(
+            f'[Train][Target][CM]:\n {str(np.sum(target_cm, axis=0))}')
+        train_batch_generator.write(
+            f'[Train][Senti][CM]:\n {str(np.sum(sentiment_cm, axis=0))}')
+        # Test
         test_batch_generator = tqdm(dataset.batch_generator(
             batch_size=kwargs.get('batch_size'), training=False),
                                     desc='testing')
+        target_cm, sentiment_cm = np.zeros(
+            (1, C_tar, C_tar), dtype=np.int32), np.zeros((1, C_sent, C_sent),
+                                                         dtype=np.int32)
         for input_tuple in test_batch_generator:
             if kwargs.get('embedding') == 'fasttext':
                 feed_dict = build_feed_dict(input_tuple,
@@ -168,9 +229,21 @@ def main(*args, **kwargs):
                 feed_dict = build_feed_dict(input_tuple, input_type='ids')
             tar_p, tar_r, tar_f1, sent_p, sent_r, sent_f1 = model.test_on_batch(
                 feed_dict)
+            temp_target_cm, temp_sentiment_cm = get_confusion_matrix(
+                feed_dict, model, C_tar=C_tar, C_sent=C_sent)
+            target_cm = np.append(target_cm,
+                                  np.expand_dims(temp_target_cm, axis=0),
+                                  axis=0)
+            sentiment_cm = np.append(sentiment_cm,
+                                     np.expand_dims(temp_sentiment_cm, axis=0),
+                                     axis=0)
             test_batch_generator.set_description(
                 f'[Test][Target]: p-{tar_p:.3f}, r-{tar_r:.3f}, f1-{tar_f1:.3f} [Senti]: p-{sent_p:.3f}, r-{sent_r:.3f}, f1-{sent_f1:.3f}'
             )
+        test_batch_generator.write(
+            f'[Test][Target][CM]:\n {str(np.sum(target_cm, axis=0))}')
+        test_batch_generator.write(
+            f'[Test][Senti][CM]:\n {str(np.sum(sentiment_cm, axis=0))}')
         model.save_model(kwargs.get('model_dir') + '/' + 'model')
     logger.info('Training finished.')
 
