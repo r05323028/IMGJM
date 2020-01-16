@@ -146,8 +146,9 @@ class BaseDataset(metaclass=ABCMeta):
             polarities.append(polarity_)
         return sentences, entities, polarities
 
-    def transform(self, sentence_list: List[List]
-                  ) -> Tuple[List[List[List]], List[List]]:
+    def transform(
+            self,
+            sentence_list: List[List]) -> Tuple[List[List[List]], List[List]]:
         '''
         Transform segmented sentence into char & word ids
 
@@ -214,7 +215,8 @@ class BaseDataset(metaclass=ABCMeta):
         outputs = self.merge_and_pad_all(self.raw_test_data)
         return outputs
 
-    def batch_generator(self, batch_size: int = 32,
+    def batch_generator(self,
+                        batch_size: int = 32,
                         training: bool = True) -> Tuple[np.ndarray]:
         if training:
             dataset = self.raw_train_data

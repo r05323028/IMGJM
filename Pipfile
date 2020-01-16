@@ -21,6 +21,7 @@ fasttext = "*"
 openpyxl = "*"
 jieba = "*"
 sklearn = "*"
+tensorflow-addons = "*"
 
 [requires]
 python_version = "3.6"

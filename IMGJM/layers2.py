@@ -130,8 +130,11 @@ class CoarseGrainedLayer(tf.keras.layers.Layer):
         self.W_q = self.add_weight('W_q',
                                    shape=[2, self.hidden_nums],
                                    dtype=tf.float32)
-        gru_fw = tf.keras.layers.GRU(units=self.hidden_nums)
-        gru_bw = tf.keras.layers.GRU(units=self.hidden_nums, go_backwards=True)
+        gru_fw = tf.keras.layers.GRU(units=int(self.hidden_nums / 2),
+                                     return_sequences=True)
+        gru_bw = tf.keras.layers.GRU(units=int(self.hidden_nums / 2),
+                                     return_sequences=True,
+                                     go_backwards=True)
         self.blstm = tf.keras.layers.Bidirectional(gru_fw,
                                                    backward_layer=gru_bw)
 
@@ -240,8 +243,11 @@ class FineGrainedLayer(tf.keras.layers.Layer):
         self.C_sent = C_sent
 
     def build(self, input_shape: tf.TensorShape):
-        gru_fw = tf.keras.layers.GRU(units=self.hidden_nums)
-        gru_bw = tf.keras.layers.GRU(units=self.hidden_nums, go_backwards=True)
+        gru_fw = tf.keras.layers.GRU(units=int(self.hidden_nums / 2),
+                                     return_sequences=True)
+        gru_bw = tf.keras.layers.GRU(units=int(self.hidden_nums / 2),
+                                     return_sequences=True,
+                                     go_backwards=True)
         self.blstm = tf.keras.layers.Bidirectional(gru_fw,
                                                    backward_layer=gru_bw)
         self.W_ft = self.add_weight('W_ft',
