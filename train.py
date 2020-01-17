@@ -1,18 +1,17 @@
-# Copyright (c) 2019 seanchang
+# Copyright (c) 2020 seanchang
 #
 # This software is released under the MIT License.
 # https://opensource.org/licenses/MIT
-'''
-Training script for IMGJM
-'''
+
 from typing import Dict, Tuple
 from argparse import ArgumentParser
+import coloredlogs
 import logging
 import yaml
-import coloredlogs
 import numpy as np
+import tensorflow as tf
+import tensorflow_addons as tfa
 from tqdm import tqdm, trange
-from sklearn.metrics import multilabel_confusion_matrix, confusion_matrix
 from IMGJM import IMGJM
 from IMGJM.data import (SemEval2014, Twitter, KKBOXSentimentData)
 from IMGJM.utils import build_glove_embedding, build_mock_embedding
@@ -40,6 +39,7 @@ def get_logger(logger_name: str = 'IMGJM',
 
 def get_args() -> Dict:
     arg_parser = ArgumentParser()
+    arg_parser.add_argument('--learning_rate', default=0.001, type=float)
     arg_parser.add_argument('--batch_size', type=int, default=32)
     arg_parser.add_argument('--epochs', type=int, default=50)
     arg_parser.add_argument('--model_dir', type=str, default='outputs')
@@ -51,72 +51,43 @@ def get_args() -> Dict:
     return vars(arg_parser.parse_args())
 
 
-def build_feed_dict(input_tuple: Tuple[np.ndarray],
-                    input_type: str = 'ids') -> Dict:
-    if input_type == 'ids':
-        pad_char_ids, pad_word_ids, sequence_length, pad_entities, pad_polarities = input_tuple
-        feed_dict = {
-            'char_ids': pad_char_ids,
-            'word_ids': pad_word_ids,
-            'sequence_length': sequence_length,
-            'y_target': pad_entities,
-            'y_sentiment': pad_polarities,
-        }
-        return feed_dict
-    else:
-        pad_char_ids, pad_word_embedding, sequence_length, pad_entities, pad_polarities = input_tuple
-        feed_dict = {
-            'char_ids': pad_char_ids,
-            'word_embedding': pad_word_embedding,
-            'sequence_length': sequence_length,
-            'y_target': pad_entities,
-            'y_sentiment': pad_polarities,
-        }
-        return feed_dict
-
-
 def load_model_config(file_path: str) -> Dict:
     with open(file_path, 'r') as file:
         config = yaml.load(file, Loader=yaml.FullLoader)
         return config
 
 
-def get_confusion_matrix(feed_dict: Dict,
-                         model: IMGJM,
-                         C_tar: int = 5,
-                         C_sent: int = 7,
-                         *args,
-                         **kwargs) -> Tuple[np.ndarray]:
-    '''
-    Get target and sentiment confusion matrix
+def run_optimization(inputs: Tuple, optimizer: tf.optimizers.Optimizer,
+                     model: tf.keras.Model):
+    with tf.GradientTape() as g:
+        multi_grained_target, multi_grained_sentiment = model(inputs,
+                                                              training=True)
+        total_loss = model.get_total_loss(inputs)
+    trainable_variables = model.trainable_variables
+    gradients = g.gradient(total_loss, trainable_variables)
+    optimizer.apply_gradients(zip(gradients, trainable_variables))
 
-    Args:
-        feed_dict (dict): model inputs.
-        model (IMGJM): model.
-        C_tar (int): target class numbers.
-        C_sent (int): sentiment class numbers.
 
-    Returns:
-        target_cm (np.ndarray): target confusion matrix.
-        sentiment_cm (np.ndarray): sentiment confusion matrix.
-    '''
-    target_preds, sentiment_preds = model.predict_on_batch(feed_dict)
-    target_labels = feed_dict.get('y_target')
-    sentiment_labels = feed_dict.get('y_sentiment')
-
-    target_confusion_matrix = confusion_matrix(
-        np.reshape(target_labels,
-                   (target_labels.shape[0] * target_labels.shape[1])),
-        np.reshape(target_preds,
-                   (target_preds.shape[0] * target_preds.shape[1])),
-        labels=list(range(C_tar)))
-    sentiment_confusion_matrix = confusion_matrix(
-        np.reshape(sentiment_labels,
-                   (sentiment_labels.shape[0] * sentiment_labels.shape[1])),
-        np.reshape(sentiment_preds,
-                   (sentiment_preds.shape[0] * sentiment_preds.shape[1])),
-        labels=list(range(C_sent)))
-    return target_confusion_matrix, sentiment_confusion_matrix
+def train(model: tf.keras.Model,
+          data: tf.data.Dataset,
+          optimizer: tf.optimizers.Optimizer,
+          average: str = 'micro'):
+    target_f1 = tfa.metrics.F1Score(num_classes=model.C_tar, average=average)
+    sentiment_f1 = tfa.metrics.F1Score(num_classes=model.C_sent,
+                                       average=average)
+    pbar = tqdm(data)
+    for i, inputs in enumerate(pbar):
+        run_optimization(inputs, optimizer, model)
+        target_pred, sent_pred = model.crf_decode(inputs)
+        target_f1.update_state(y_true=inputs[3],
+                               y_pred=tf.cast(target_pred, tf.float32))
+        sentiment_f1.update_state(y_true=inputs[4],
+                                  y_pred=tf.cast(sent_pred, tf.float32))
+        pbar.set_description(
+            f'[Train][Target]F1: {target_f1.result().numpy():.2f} [Senti]F1: {sentiment_f1.result().numpy():.2f}'
+        )
+        if i % 20 == 0 and i != 0:
+            model.save_weights('outputs/NER', save_format='tf')
 
 
 def main(*args, **kwargs):
@@ -166,7 +137,7 @@ def main(*args, **kwargs):
         logger.info('Dataset loaded.')
     else:
         logger.warning('Invalid embedding choice.')
-    logger.info('Loading model...')
+    optimizer = tf.optimizers.Adam(kwargs.get('learning_rate'))
     config = load_model_config(kwargs.get('model_config_fp'))
     if kwargs.get('embedding') == 'fasttext':
         model = IMGJM(char_vocab_size=vocab_size,
@@ -176,76 +147,19 @@ def main(*args, **kwargs):
                       **config['custom'])
     else:
         model = IMGJM(char_vocab_size=vocab_size,
-                      embedding_weights=embedding_weights,
+                      embedding_matrix=embedding_weights,
+                      input_type='ids',
                       dropout=False,
                       **config['custom'])
-    logger.info('Model loaded.')
-    logger.info('Start training...')
-    C_tar = config['custom'].get('C_tar')
-    C_sent = config['custom'].get('C_sent')
-    for _ in trange(kwargs.get('epochs'), desc='epoch'):
-        # Train
-        train_batch_generator = tqdm(
-            dataset.batch_generator(batch_size=kwargs.get('batch_size')),
-            desc='training')
-        target_cm, sentiment_cm = np.zeros(
-            (1, C_tar, C_tar), dtype=np.int32), np.zeros((1, C_sent, C_sent),
-                                                         dtype=np.int32)
-        for input_tuple in train_batch_generator:
-            if kwargs.get('embedding') == 'fasttext':
-                feed_dict = build_feed_dict(input_tuple,
-                                            input_type='embedding')
-            else:
-                feed_dict = build_feed_dict(input_tuple, input_type='ids')
-            tar_p, tar_r, tar_f1, sent_p, sent_r, sent_f1 = model.train_on_batch(
-                feed_dict)
-            temp_target_cm, temp_sentiment_cm = get_confusion_matrix(
-                feed_dict, model, C_tar=C_tar, C_sent=C_sent)
-            target_cm = np.append(target_cm,
-                                  np.expand_dims(temp_target_cm, axis=0),
-                                  axis=0)
-            sentiment_cm = np.append(sentiment_cm,
-                                     np.expand_dims(temp_sentiment_cm, axis=0),
-                                     axis=0)
-            train_batch_generator.set_description(
-                f'[Train][Target]: p-{tar_p:.3f}, r-{tar_r:.3f}, f1-{tar_f1:.3f} [Senti]: p-{sent_p:.3f}, r-{sent_r:.3f}, f1-{sent_f1:.3f}'
-            )
-        train_batch_generator.write(
-            f'[Train][Target][CM]:\n {str(np.sum(target_cm, axis=0))}')
-        train_batch_generator.write(
-            f'[Train][Senti][CM]:\n {str(np.sum(sentiment_cm, axis=0))}')
-        # Test
-        test_batch_generator = tqdm(dataset.batch_generator(
-            batch_size=kwargs.get('batch_size'), training=False),
-                                    desc='testing')
-        target_cm, sentiment_cm = np.zeros(
-            (1, C_tar, C_tar), dtype=np.int32), np.zeros((1, C_sent, C_sent),
-                                                         dtype=np.int32)
-        for input_tuple in test_batch_generator:
-            if kwargs.get('embedding') == 'fasttext':
-                feed_dict = build_feed_dict(input_tuple,
-                                            input_type='embedding')
-            else:
-                feed_dict = build_feed_dict(input_tuple, input_type='ids')
-            tar_p, tar_r, tar_f1, sent_p, sent_r, sent_f1 = model.test_on_batch(
-                feed_dict)
-            temp_target_cm, temp_sentiment_cm = get_confusion_matrix(
-                feed_dict, model, C_tar=C_tar, C_sent=C_sent)
-            target_cm = np.append(target_cm,
-                                  np.expand_dims(temp_target_cm, axis=0),
-                                  axis=0)
-            sentiment_cm = np.append(sentiment_cm,
-                                     np.expand_dims(temp_sentiment_cm, axis=0),
-                                     axis=0)
-            test_batch_generator.set_description(
-                f'[Test][Target]: p-{tar_p:.3f}, r-{tar_r:.3f}, f1-{tar_f1:.3f} [Senti]: p-{sent_p:.3f}, r-{sent_r:.3f}, f1-{sent_f1:.3f}'
-            )
-        test_batch_generator.write(
-            f'[Test][Target][CM]:\n {str(np.sum(target_cm, axis=0))}')
-        test_batch_generator.write(
-            f'[Test][Senti][CM]:\n {str(np.sum(sentiment_cm, axis=0))}')
-        model.save_model(kwargs.get('model_dir') + '/' + 'model')
-    logger.info('Training finished.')
+    if kwargs.get('embedding') == 'fasttext':
+        tf_data = tf.data.Dataset.from_tensor_slices(
+            dataset.pad_train_data).batch(kwargs.get('batch_size')).repeat(
+                kwargs.get('epochs'))
+    else:
+        tf_data = tf.data.Dataset.from_tensor_slices(
+            dataset.pad_train_data).batch(kwargs.get('batch_size')).repeat(
+                kwargs.get('epochs'))
+    train(model, tf_data, optimizer)
 
 
 if __name__ == '__main__':
