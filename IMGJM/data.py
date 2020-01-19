@@ -54,6 +54,14 @@ class BaseDataset(metaclass=ABCMeta):
                                                self.raw_test_data)
 
     @property
+    def pad_char_id(self) -> int:
+        return len(self.char2id)
+
+    @property
+    def pad_word_id(self) -> int:
+        return len(self.word2id)
+
+    @property
     def char2id(self):
         return self._char2id
 

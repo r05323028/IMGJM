@@ -48,6 +48,7 @@ def get_args() -> Dict:
                             default='model_settings.yml')
     arg_parser.add_argument('--embedding', type=str, default='glove')
     arg_parser.add_argument('--dataset', type=str, default='laptop')
+    arg_parser.add_argument('--checkpoint_step', type=int, default=100)
     return vars(arg_parser.parse_args())
 
 
@@ -68,26 +69,47 @@ def run_optimization(inputs: Tuple, optimizer: tf.optimizers.Optimizer,
     optimizer.apply_gradients(zip(gradients, trainable_variables))
 
 
+def test(model: tf.keras.Model, data: tf.data.Dataset, average: str = 'micro'):
+    test_target_f1 = tfa.metrics.F1Score(num_classes=model.C_tar,
+                                         average=average)
+    test_sentiment_f1 = tfa.metrics.F1Score(num_classes=model.C_sent,
+                                            average=average)
+    test_pbar = tqdm(data, desc='testing')
+    for i, inputs in enumerate(test_pbar):
+        target_pred, sent_pred = model.crf_decode(inputs)
+        test_target_f1.update_state(y_true=inputs[3],
+                                    y_pred=tf.cast(target_pred, tf.float32))
+        test_sentiment_f1.update_state(y_true=inputs[4],
+                                       y_pred=tf.cast(sent_pred, tf.float32))
+        test_pbar.set_description(
+            f'[Test][Target]F1: {test_target_f1.result().numpy():.2f} [Senti]F1: {test_sentiment_f1.result().numpy():.2f}'
+        )
+
+
 def train(model: tf.keras.Model,
-          data: tf.data.Dataset,
+          train_data: tf.data.Dataset,
           optimizer: tf.optimizers.Optimizer,
+          test_data: tf.data.Dataset = None,
+          checkpoint_step: int = 100,
           average: str = 'micro'):
     target_f1 = tfa.metrics.F1Score(num_classes=model.C_tar, average=average)
     sentiment_f1 = tfa.metrics.F1Score(num_classes=model.C_sent,
                                        average=average)
-    pbar = tqdm(data)
-    for i, inputs in enumerate(pbar):
+    train_pbar = tqdm(train_data, desc='training')
+    for i, inputs in enumerate(train_pbar):
         run_optimization(inputs, optimizer, model)
         target_pred, sent_pred = model.crf_decode(inputs)
         target_f1.update_state(y_true=inputs[3],
                                y_pred=tf.cast(target_pred, tf.float32))
         sentiment_f1.update_state(y_true=inputs[4],
                                   y_pred=tf.cast(sent_pred, tf.float32))
-        pbar.set_description(
+        train_pbar.set_description(
             f'[Train][Target]F1: {target_f1.result().numpy():.2f} [Senti]F1: {sentiment_f1.result().numpy():.2f}'
         )
-        if i % 20 == 0 and i != 0:
-            model.save_weights('outputs/NER', save_format='tf')
+        if i % checkpoint_step == 0 and i != 0:
+            if test_data:
+                test(model, data=test_data)
+            model.save_weights('outputs/IMGJM', save_format='tf')
 
 
 def main(*args, **kwargs):
@@ -137,8 +159,8 @@ def main(*args, **kwargs):
         logger.info('Dataset loaded.')
     else:
         logger.warning('Invalid embedding choice.')
-    optimizer = tf.optimizers.Adam(kwargs.get('learning_rate'))
     config = load_model_config(kwargs.get('model_config_fp'))
+    optimizer = tf.optimizers.Adam(config['custom'].get('learning_rate'))
     if kwargs.get('embedding') == 'fasttext':
         model = IMGJM(char_vocab_size=vocab_size,
                       embedding_size=dataset.fasttext_model.get_dimension(),
@@ -152,14 +174,38 @@ def main(*args, **kwargs):
                       dropout=False,
                       **config['custom'])
     if kwargs.get('embedding') == 'fasttext':
-        tf_data = tf.data.Dataset.from_tensor_slices(
-            dataset.pad_train_data).batch(kwargs.get('batch_size')).repeat(
-                kwargs.get('epochs'))
+        temp_train_data = dataset.pad_train_data
+        char, word, seq_len, y_tar, y_sent = temp_train_data
+        per_index = np.random.permutation(len(seq_len))
+        temp_train_data = (np.array(char)[per_index],
+                           np.array(word)[per_index],
+                           np.array(seq_len)[per_index],
+                           np.array(y_tar)[per_index],
+                           np.array(y_sent)[per_index])
+        tf_train_data = tf.data.Dataset.from_tensor_slices(
+            temp_train_data).repeat(kwargs.get('epochs')).batch(
+                kwargs.get('batch_size'))
+        tf_test_data = tf.data.Dataset.from_tensor_slices(
+            dataset.pad_test_data).repeat(1).batch(kwargs.get('batch_size'))
     else:
-        tf_data = tf.data.Dataset.from_tensor_slices(
-            dataset.pad_train_data).batch(kwargs.get('batch_size')).repeat(
-                kwargs.get('epochs'))
-    train(model, tf_data, optimizer)
+        temp_train_data = dataset.pad_train_data
+        char, word, seq_len, y_tar, y_sent = temp_train_data
+        per_index = np.random.permutation(len(seq_len))
+        temp_train_data = (np.array(char)[per_index],
+                           np.array(word)[per_index],
+                           np.array(seq_len)[per_index],
+                           np.array(y_tar)[per_index],
+                           np.array(y_sent)[per_index])
+        tf_train_data = tf.data.Dataset.from_tensor_slices(
+            temp_train_data).repeat(kwargs.get('epochs')).batch(
+                kwargs.get('batch_size'))
+        tf_test_data = tf.data.Dataset.from_tensor_slices(
+            dataset.pad_test_data).repeat(1).batch(kwargs.get('batch_size'))
+    train(model=model,
+          train_data=tf_train_data,
+          optimizer=optimizer,
+          test_data=tf_test_data,
+          checkpoint_step=kwargs.get('checkpoint_step'))
 
 
 if __name__ == '__main__':

@@ -49,7 +49,8 @@ class IMGJM(tf.keras.Model):
                  C_tar: int = 5,
                  C_sent: int = 7,
                  beta: float = 0.7,
-                 mask_value: float = 0.0,
+                 char_mask_value: int = 0,
+                 word_mask_value: int = 0,
                  *args,
                  **kwargs):
         super(IMGJM, self).__init__()
@@ -65,6 +66,8 @@ class IMGJM(tf.keras.Model):
         self.dropout = dropout
         self.dropout_rate = dropout_rate
         self.kernel_size = kernel_size
+        self.char_mask_value = char_mask_value
+        self.word_mask_value = word_mask_value
         self.filter_nums = filter_nums
         self.hidden_nums = hidden_nums
         self.C_tar = C_tar
@@ -72,7 +75,10 @@ class IMGJM(tf.keras.Model):
 
         # layers initialization
         self.dropout_layer = tf.keras.layers.Dropout(rate=self.dropout_rate)
-        self.mask_layer = tf.keras.layers.Masking(mask_value=mask_value)
+        self.char_mask_layer = tf.keras.layers.Masking(
+            mask_value=self.char_mask_value)
+        self.word_mask_layer = tf.keras.layers.Masking(
+            mask_value=self.word_mask_value)
         self.char_embedding_layer = CharEmbedding(vocab_size=char_vocab_size)
         if self.input_type == 'ids':
             self.word_embedding_layer = GloveEmbedding(self.embedding_matrix)
@@ -88,23 +94,29 @@ class IMGJM(tf.keras.Model):
         self.target_trans_params = np.zeros(shape=(self.C_tar, self.C_tar))
         self.sentiment_trans_params = np.zeros(shape=(self.C_sent, C_sent))
 
-    def get_loss(self, multi_grained, labels, sequence_lengths):
+    def get_loss(self, multi_grained: tf.Tensor, labels: tf.Tensor,
+                 sequence_lengths: tf.Tensor) -> tf.Tensor:
         log_likelihood, trans_params = tfa.text.crf_log_likelihood(
             inputs=multi_grained,
             tag_indices=labels,
             sequence_lengths=sequence_lengths)
         return tf.reduce_mean(-log_likelihood), trans_params
 
-    def get_loss_ol(self, coarse_grained_target, sentiment_clue):
+    def get_loss_ol(self, coarse_grained_target: tf.Tensor,
+                    sentiment_clue: tf.Tensor) -> tf.Tensor:
         return tf.reduce_mean(coarse_grained_target[:, :, 0] *
                               sentiment_clue[:, :, 0])
 
-    def get_loss_brl(self, multi_grained_target, multi_grained_sentiment):
+    def get_loss_brl(self, multi_grained_target: tf.Tensor,
+                     multi_grained_sentiment: tf.Tensor) -> tf.Tensor:
         return tf.losses.mean_squared_error(
             1 - tf.nn.softmax(multi_grained_target)[:, :, 0],
             1 - tf.nn.softmax(multi_grained_sentiment)[:, :, 0])
 
-    def get_total_loss(self, inputs: Tuple, beta=1.0, gamma=0.7):
+    def get_total_loss(self,
+                       inputs: Tuple[tf.Tensor],
+                       beta: float = 1.0,
+                       gamma: float = 0.7) -> tf.Tensor:
         _, _, seq_len, y_target, y_sent = inputs
         target_loss, self.target_trans_params = self.get_loss(
             self.multi_grained_target, y_target, seq_len)
@@ -115,7 +127,7 @@ class IMGJM(tf.keras.Model):
                                 self.multi_grained_sentiment)
         return target_loss + sent_loss + beta * ol + gamma * brl
 
-    def crf_decode(self, inputs):
+    def crf_decode(self, inputs: Tuple[tf.Tensor]) -> Tuple[tf.Tensor]:
         _, _, seq_len, _, _ = inputs
         multi_grained_target, multi_grained_sentiment = self.call(
             inputs, training=False)
@@ -153,16 +165,15 @@ class IMGJM(tf.keras.Model):
             self.word_embedding = self.dropout_layer(self.word_embedding,
                                                      training=training)
         self.coarse_grained_target, self.sentiment_clue, hidden_states = self.coarse_grained_layer(
-            self.mask_layer(self.char_embedding),
-            self.mask_layer(self.word_embedding))
+            self.char_mask_layer(self.char_embedding),
+            self.word_mask_layer(self.word_embedding))
         interacted_target, interacted_sentiment = self.interaction_layer(
             self.coarse_grained_target, self.sentiment_clue, hidden_states)
         self.multi_grained_target, self.multi_grained_sentiment = self.fine_grained_layer(
-            self.mask_layer(interacted_target),
-            self.mask_layer(interacted_sentiment), hidden_states)
+            interacted_target, interacted_sentiment, hidden_states)
         if self.dropout:
-            multi_grained_target = self.dropout_layer(
+            self.multi_grained_target = self.dropout_layer(
                 self.multi_grained_target, training=training)
-            multi_grained_sentiment = self.dropout_layer(
+            self.multi_grained_sentiment = self.dropout_layer(
                 self.multi_grained_sentiment, training=training)
         return self.multi_grained_target, self.multi_grained_sentiment
