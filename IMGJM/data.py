@@ -73,6 +73,14 @@ class BaseDataset(metaclass=ABCMeta):
             self._char2id = self.build_char2id(self.raw_train_data +
                                                self.raw_test_data)
 
+    @property
+    def train_max_seq_len(self) -> int:
+        return max(self.train_data[2])
+
+    @property
+    def test_max_seq_len(self) -> int:
+        return max(self.test_data[2])
+
     @staticmethod
     def build_word2id(sentence_list: List) -> Dict:
         word2id = {}

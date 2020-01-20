@@ -115,22 +115,26 @@ class IMGJM(tf.keras.Model):
 
     def get_total_loss(self,
                        inputs: Tuple[tf.Tensor],
+                       mask: tf.Tensor,
+                       training: bool = False,
                        beta: float = 1.0,
                        gamma: float = 0.7) -> tf.Tensor:
         _, _, seq_len, y_target, y_sent = inputs
+        multi_grained_target, multi_grained_sentiment = self.call(
+            inputs, mask=mask, training=training)
         target_loss, self.target_trans_params = self.get_loss(
-            self.multi_grained_target, y_target, seq_len)
+            multi_grained_target, y_target, seq_len)
         sent_loss, self.sentiment_trans_params = self.get_loss(
-            self.multi_grained_sentiment, y_sent, seq_len)
+            multi_grained_sentiment, y_sent, seq_len)
         ol = self.get_loss_ol(self.coarse_grained_target, self.sentiment_clue)
-        brl = self.get_loss_brl(self.multi_grained_target,
-                                self.multi_grained_sentiment)
+        brl = self.get_loss_brl(multi_grained_target, multi_grained_sentiment)
         return target_loss + sent_loss + beta * ol + gamma * brl
 
-    def crf_decode(self, inputs: Tuple[tf.Tensor]) -> Tuple[tf.Tensor]:
+    def crf_decode(self, inputs: Tuple[tf.Tensor],
+                   mask: tf.Tensor) -> Tuple[tf.Tensor]:
         _, _, seq_len, _, _ = inputs
         multi_grained_target, multi_grained_sentiment = self.call(
-            inputs, training=False)
+            inputs, mask=mask, training=False)
         target_preds, _ = tfa.text.crf_decode(
             potentials=multi_grained_target,
             transition_params=self.target_trans_params,
@@ -143,37 +147,49 @@ class IMGJM(tf.keras.Model):
 
     def call(self,
              inputs: Tuple[tf.Tensor],
+             mask: tf.Tensor,
              training: bool = False) -> Tuple[tf.Tensor]:
         '''
         Feed forward
 
         Args:
             inputs (tuple): (char_ids, word_embedding, sequence_length, target_label, sentiment_label)
+            mask (tf.Tensor)
             training (bool)
 
         Returns:
-            output (tf.Tensor)
+            multi_grained_target (tf.Tensor)
+            multi_grained_sentiment (tf.Tensor)
         '''
         if self.input_type == 'ids':
             self.word_embedding = self.word_embedding_layer(inputs[1])
         else:
             self.word_embedding = inputs[1]
         self.char_embedding = self.char_embedding_layer(inputs[0])
+        sequence_length = inputs[2]
         if self.dropout:
             self.char_embedding = self.dropout_layer(self.char_embedding,
                                                      training=training)
             self.word_embedding = self.dropout_layer(self.word_embedding,
                                                      training=training)
         self.coarse_grained_target, self.sentiment_clue, hidden_states = self.coarse_grained_layer(
-            self.char_mask_layer(self.char_embedding),
-            self.word_mask_layer(self.word_embedding))
+            self.char_embedding,
+            self.word_embedding,
+            sequence_length=sequence_length,
+            mask=mask,
+            training=training)
         interacted_target, interacted_sentiment = self.interaction_layer(
             self.coarse_grained_target, self.sentiment_clue, hidden_states)
-        self.multi_grained_target, self.multi_grained_sentiment = self.fine_grained_layer(
-            interacted_target, interacted_sentiment, hidden_states)
+        multi_grained_target, multi_grained_sentiment = self.fine_grained_layer(
+            interacted_target,
+            interacted_sentiment,
+            hidden_states,
+            sequence_length=sequence_length,
+            mask=mask,
+            training=training)
         if self.dropout:
-            self.multi_grained_target = self.dropout_layer(
-                self.multi_grained_target, training=training)
-            self.multi_grained_sentiment = self.dropout_layer(
-                self.multi_grained_sentiment, training=training)
-        return self.multi_grained_target, self.multi_grained_sentiment
+            multi_grained_target = self.dropout_layer(multi_grained_target,
+                                                      training=training)
+            multi_grained_sentiment = self.dropout_layer(
+                multi_grained_sentiment, training=training)
+        return multi_grained_target, multi_grained_sentiment

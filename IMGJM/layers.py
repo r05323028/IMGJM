@@ -18,7 +18,7 @@ class GloveEmbedding(tf.keras.layers.Layer):
 
     def call(self, inputs: Union[np.ndarray, tf.Tensor]) -> tf.Tensor:
         word_embeddings = tf.nn.embedding_lookup(self.embeddings, inputs)
-        return word_embeddings
+        return tf.cast(word_embeddings, tf.float32)
 
 
 class Gate(tf.keras.layers.Layer):
@@ -141,12 +141,16 @@ class CoarseGrainedLayer(tf.keras.layers.Layer):
     def call(self,
              char_embedding: tf.Tensor,
              word_embedding: tf.Tensor,
+             sequence_length: tf.Tensor,
+             mask: tf.Tensor,
              training: bool = False) -> tf.Tensor:
         '''
         Args:
             char_embedding (tf.Tensor)
             word_embedding (tf.Tensor)
             sequence_length (tf.Tensor)
+            mask (tf.Tensor)
+            training (bool)
 
         Returns:
             z_T (tf.Tensor): coarse-grained target
@@ -155,7 +159,9 @@ class CoarseGrainedLayer(tf.keras.layers.Layer):
         '''
         word_representation = tf.concat([char_embedding, word_embedding],
                                         axis=-1)
-        hidden_states = self.blstm(word_representation)
+        hidden_states = self.blstm(word_representation,
+                                   mask=mask,
+                                   training=training)
         z_T = tf.nn.softmax(
             tf.matmul(hidden_states, self.W_z, transpose_b=True))
         z_S = tf.nn.softmax(
@@ -208,6 +214,7 @@ class Interaction(tf.keras.layers.Layer):
             coarse_grained_target (tf.Tensor)
             sentiment_clue (tf.Tensor)
             hidden_states (tf.Tensor)
+            training (bool)
         
         Returns:
             l_T (tf.Tensor)
@@ -263,8 +270,12 @@ class FineGrainedLayer(tf.keras.layers.Layer):
              interacted_target: tf.Tensor,
              interacted_sentiment: tf.Tensor,
              hidden_states: tf.Tensor,
+             sequence_length: tf.Tensor,
+             mask: tf.Tensor,
              training: bool = False) -> tf.Tensor:
-        hidden_states_ = self.blstm(hidden_states)
+        hidden_states_ = self.blstm(hidden_states,
+                                    mask=mask,
+                                    training=training)
         f_T = tf.matmul(hidden_states_, self.W_ft, transpose_b=True)
         f_S = tf.matmul(hidden_states_, self.W_fs, transpose_b=True)
         o_T = self.gate_T(interacted_target, f_T)
