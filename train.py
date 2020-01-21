@@ -49,6 +49,7 @@ def get_args() -> Dict:
     arg_parser.add_argument('--embedding', type=str, default='glove')
     arg_parser.add_argument('--dataset', type=str, default='laptop')
     arg_parser.add_argument('--checkpoint_step', type=int, default=100)
+    arg_parser.add_argument('--logdir', type=str, default='logs')
     return vars(arg_parser.parse_args())
 
 
@@ -59,15 +60,13 @@ def load_model_config(file_path: str) -> Dict:
 
 
 def run_optimization(inputs: Tuple, optimizer: tf.optimizers.Optimizer,
-                     model: tf.keras.Model, mask: tf.Tensor):
+                     model: tf.keras.Model, mask: tf.Tensor) -> tf.Tensor:
     with tf.GradientTape() as g:
-        # multi_grained_target, multi_grained_sentiment = model(inputs,
-        #                                                       mask=mask,
-        #                                                       training=True)
         total_loss = model.get_total_loss(inputs, mask=mask, training=True)
     trainable_variables = model.trainable_variables
     gradients = g.gradient(total_loss, trainable_variables)
     optimizer.apply_gradients(zip(gradients, trainable_variables))
+    return total_loss
 
 
 def test(model: tf.keras.Model,
@@ -82,12 +81,22 @@ def test(model: tf.keras.Model,
     for i, inputs in enumerate(test_pbar):
         mask = tf.sequence_mask(inputs[2], max_seq_len)
         target_pred, sent_pred = model.crf_decode(inputs, mask=mask)
-        test_target_f1.update_state(y_true=inputs[3],
-                                    y_pred=tf.cast(target_pred, tf.float32))
-        test_sentiment_f1.update_state(y_true=inputs[4],
-                                       y_pred=tf.cast(sent_pred, tf.float32))
+        test_target_f1(y_true=inputs[3],
+                       y_pred=tf.cast(target_pred, tf.float32))
+        test_target_precision = test_target_f1.true_positives / (
+            test_target_f1.false_positives + test_target_f1.true_positives)
+        test_target_recall = test_target_f1.true_positives / (
+            test_target_f1.false_negatives + test_target_f1.true_positives)
+        test_sentiment_f1(y_true=inputs[4],
+                          y_pred=tf.cast(sent_pred, tf.float32))
+        test_sentiment_precision = test_sentiment_f1.true_positives / (
+            test_sentiment_f1.false_positives +
+            test_sentiment_f1.true_positives)
+        test_sentiment_recall = test_sentiment_f1.true_positives / (
+            test_sentiment_f1.false_negatives +
+            test_sentiment_f1.true_positives)
         test_pbar.set_description(
-            f'[Test][Target]F1: {test_target_f1.result().numpy():.2f} [Senti]F1: {test_sentiment_f1.result().numpy():.2f}'
+            f'[Test][Target][Average: {average}]P: {test_target_precision.numpy():.3f} R: {test_target_recall.numpy():.3f} F1: {test_target_f1.result().numpy():.3f} [Senti]P: {test_sentiment_precision.numpy():.3f} R: {test_sentiment_recall.numpy():.3f} F1: {test_sentiment_f1.result().numpy():.3f}'
         )
 
 
@@ -98,22 +107,55 @@ def train(model: tf.keras.Model,
           test_data: tf.data.Dataset = None,
           test_max_seq_len: int = None,
           checkpoint_step: int = 100,
-          average: str = 'micro'):
+          average: str = 'micro',
+          logdir: str = 'logs'):
+    metrics_file_writer = tf.summary.create_file_writer(logdir + '/metrics')
+    metrics_file_writer.set_as_default()
     target_f1 = tfa.metrics.F1Score(num_classes=model.C_tar, average=average)
     sentiment_f1 = tfa.metrics.F1Score(num_classes=model.C_sent,
                                        average=average)
     train_pbar = tqdm(train_data, desc='training')
     for i, inputs in enumerate(train_pbar):
         train_mask = tf.sequence_mask(inputs[2], train_max_seq_len)
-        run_optimization(inputs, optimizer, model, mask=train_mask)
+        total_loss = run_optimization(inputs,
+                                      optimizer,
+                                      model,
+                                      mask=train_mask)
         target_pred, sent_pred = model.crf_decode(inputs, mask=train_mask)
-        target_f1.update_state(y_true=inputs[3],
-                               y_pred=tf.cast(target_pred, tf.float32))
-        sentiment_f1.update_state(y_true=inputs[4],
-                                  y_pred=tf.cast(sent_pred, tf.float32))
+        target_f1(y_true=inputs[3], y_pred=tf.cast(target_pred, tf.float32))
+        target_precision = target_f1.true_positives / (
+            target_f1.false_positives + target_f1.true_positives)
+        target_recall = target_f1.true_positives / (target_f1.false_negatives +
+                                                    target_f1.true_positives)
+        sentiment_f1(y_true=inputs[4], y_pred=tf.cast(sent_pred, tf.float32))
+        sentiment_precision = sentiment_f1.true_positives / (
+            sentiment_f1.false_positives + sentiment_f1.true_positives)
+        sentiment_recall = sentiment_f1.true_positives / (
+            sentiment_f1.false_negatives + sentiment_f1.true_positives)
         train_pbar.set_description(
-            f'[Train][Target]F1: {target_f1.result().numpy():.2f} [Senti]F1: {sentiment_f1.result().numpy():.2f}'
+            f'[Train][Target][Average: {average}]P: {target_precision.numpy():.3f} R: {target_recall.numpy():.3f} F1: {target_f1.result().numpy():.3f} [Senti]P: {sentiment_precision.numpy():.3f} R: {sentiment_recall.numpy():.3f} F1: {sentiment_f1.result().numpy():.3f}'
         )
+        tf.summary.scalar('total loss',
+                          data=tf.reduce_mean(total_loss),
+                          step=i)
+        tf.summary.scalar('train target precision',
+                          data=target_precision.numpy(),
+                          step=i)
+        tf.summary.scalar('train target recall',
+                          data=target_recall.numpy(),
+                          step=i)
+        tf.summary.scalar('train target f1',
+                          data=target_f1.result().numpy(),
+                          step=i)
+        tf.summary.scalar('train sentiment precision',
+                          data=sentiment_precision.numpy(),
+                          step=i)
+        tf.summary.scalar('train sentiment recall',
+                          data=sentiment_recall.numpy(),
+                          step=i)
+        tf.summary.scalar('train sentiment f1',
+                          data=sentiment_f1.result().numpy(),
+                          step=i)
         if i % checkpoint_step == 0 and i != 0:
             if test_data:
                 test(model, data=test_data, max_seq_len=test_max_seq_len)

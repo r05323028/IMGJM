@@ -91,7 +91,9 @@ class CharEmbedding(tf.keras.layers.Layer):
             'conv_weights',
             shape=[self.window_size, self.embedding_size, self.filter_nums],
             dtype=tf.float32)
-        self.conv_bias = self.add_weight('conv_bias', shape=[self.filter_nums])
+        self.conv_bias = self.add_weight('conv_bias',
+                                         shape=[self.filter_nums],
+                                         initializer=tf.initializers.zeros)
 
     def call(self,
              inputs: Union[np.ndarray, tf.Tensor],

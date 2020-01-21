@@ -12,6 +12,7 @@ import yaml
 import coloredlogs
 import numpy as np
 from tqdm import tqdm, trange
+import tensorflow as tf
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
 from IMGJM import IMGJM
@@ -176,33 +177,29 @@ def main(*args, **kwargs):
         logger.warning('Invalid embedding choice.')
     logger.info('Loading model...')
     config = load_model_config(kwargs.get('model_config_fp'))
+    optimizer = tf.optimizers.Adam(config['custom'].get('learning_rate'))
     if kwargs.get('embedding') == 'fasttext':
         model = IMGJM(char_vocab_size=vocab_size,
                       embedding_size=dataset.fasttext_model.get_dimension(),
                       input_type='embedding',
                       dropout=False,
-                      deploy=True,
                       **config['custom'])
     else:
         model = IMGJM(char_vocab_size=vocab_size,
-                      embedding_weights=embedding_weights,
+                      embedding_matrix=embedding_weights,
+                      input_type='ids',
                       dropout=False,
-                      deploy=True,
                       **config['custom'])
     logger.info('Model loaded.')
-    model.load_model('outputs' + '/' + 'model')
-    s = [
-        "i ordered my 2012 mac mini after being disappointed with spec of the new 27 ' imacs ."
-    ]
+    model.load_weights('outputs/IMGJM')
+    s = ["ESPN Soccer Net News Ardiles backs maradona for World Cup glory"]
     inputs = dataset.merge_and_pad_all(s)
-    if kwargs.get('embedding') == 'fasttext':
-        feed_dict = build_feed_dict(inputs, input_type='embedding')
-    else:
-        feed_dict = build_feed_dict(inputs, input_type='ids')
-    target_preds, sentiment_preds = model.predict_on_batch(feed_dict)
+    mask = tf.sequence_mask(inputs[2], max(inputs[2]))
+    _, _, _, sentiment_clue = model(inputs, mask=mask)
+    target_preds, sentiment_preds = model.crf_decode(inputs, mask=mask)
+    print(target_preds)
     get_sentiment_clue_vis([sent.split(' ') for sent in s], target_preds,
-                           sentiment_preds,
-                           model.get_sentiment_clue(feed_dict)[:, :, 1])
+                           sentiment_preds, sentiment_clue[:, :, 1])
 
 
 if __name__ == '__main__':
